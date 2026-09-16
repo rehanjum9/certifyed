@@ -10,9 +10,13 @@ import type { Database } from "@/types/database";
 import type { TemplateFieldRow } from "@/lib/templateFields";
 
 type CampaignRowRow = Database["public"]["Tables"]["campaign_rows"]["Row"];
-type CampaignStatus = Database["public"]["Tables"]["campaigns"]["Row"]["status"];
+type CampaignRowStatus = CampaignRowRow["status"];
+type CampaignRow = Database["public"]["Tables"]["campaigns"]["Row"];
+type CampaignStatus = CampaignRow["status"];
+type JobRow = Database["public"]["Tables"]["jobs"]["Row"];
+type JobStatus = JobRow["status"];
 
-function toFieldMappings(fields: TemplateFieldRow[]) {
+export function toFieldMappings(fields: TemplateFieldRow[]) {
   return fields.map((f) => ({ field_key: f.field_key, label: f.label, is_required: f.is_required }));
 }
 
@@ -261,7 +265,7 @@ export async function retryFailedRows(campaignId: string): Promise<RetryFailedRe
   };
 }
 
-async function requireCampaign(campaignId: string) {
+export async function requireCampaign(campaignId: string) {
   const supabase = createServiceRoleClient();
   const { data: campaign, error } = await supabase
     .from("campaigns")
@@ -272,4 +276,249 @@ async function requireCampaign(campaignId: string) {
   if (error) throw new Error(`Failed to load campaign: ${error.message}`);
   if (!campaign) throw new Error("Campaign not found.");
   return campaign;
+}
+
+// ---------------------------------------------------------------------------
+// Progress -- authoritative, always recomputed from campaign_rows. The
+// client is never trusted to report how many rows are done; every status
+// display is derived fresh from the database on every request.
+// ---------------------------------------------------------------------------
+
+export interface CampaignProgress {
+  /** Rows that pass Phase 4 validation (campaign-wide: unique email, unique serial_number, required fields present) -- the only rows that ever will be generated. */
+  eligibleTotal: number;
+  /** Rows that failed Phase 4 import validation and can never become eligible without a corrected re-import -- shown separately, never folded into eligibleTotal. */
+  invalidImportedTotal: number;
+  generated: number;
+  /** Eligible rows currently in a failed *generation* attempt (renderer/storage/transient) -- distinct from invalidImportedTotal, and retriable. */
+  failed: number;
+  pending: number;
+  generating: number;
+  progressPercent: number;
+}
+
+export interface RowStatusForProgress {
+  eligible: boolean;
+  status: CampaignRowStatus;
+}
+
+/**
+ * Pure aggregation core, split out from computeCampaignProgress so the
+ * counting logic itself (eligible vs. invalid-imported, and the
+ * generated/failed/pending/generating breakdown within the eligible set)
+ * is unit-testable without a database.
+ */
+export function summarizeCampaignProgress(rows: RowStatusForProgress[]): CampaignProgress {
+  let eligibleTotal = 0;
+  let invalidImportedTotal = 0;
+  let generated = 0;
+  let failed = 0;
+  let pending = 0;
+  let generating = 0;
+
+  for (const row of rows) {
+    if (!row.eligible) {
+      invalidImportedTotal += 1;
+      continue;
+    }
+    eligibleTotal += 1;
+    if (row.status === "generated" || row.status === "sent") generated += 1;
+    else if (row.status === "failed") failed += 1;
+    else if (row.status === "generating" || row.status === "emailing") generating += 1;
+    else pending += 1;
+  }
+
+  const progressPercent = eligibleTotal > 0 ? Math.round((generated / eligibleTotal) * 100) : 0;
+
+  return { eligibleTotal, invalidImportedTotal, generated, failed, pending, generating, progressPercent };
+}
+
+export async function computeCampaignProgress(campaignId: string): Promise<CampaignProgress> {
+  const supabase = createServiceRoleClient();
+  const campaign = await requireCampaign(campaignId);
+  const fields = await listTemplateFields(campaign.template_id);
+
+  const { data, error } = await supabase
+    .from("campaign_rows")
+    .select("row_index, recipient_email, data, status")
+    .eq("campaign_id", campaignId);
+
+  if (error) throw new Error(`Failed to load campaign rows: ${error.message}`);
+
+  const rows = data ?? [];
+  const eligibility = computeCampaignEligibility(
+    rows.map((row) => ({
+      rowIndex: row.row_index,
+      recipientEmail: row.recipient_email,
+      data: (row.data ?? {}) as Record<string, string>,
+    })),
+    toFieldMappings(fields),
+  );
+
+  return summarizeCampaignProgress(
+    rows.map((row) => ({
+      eligible: eligibility.get(row.row_index)?.eligible ?? false,
+      status: row.status,
+    })),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Job-based worker (Phase 6). Wraps generateCertificatesBatch -- the exact
+// same Phase 5 generation pipeline -- with a persistent, resumable,
+// lock-protected job record so it can be triggered repeatedly by anything
+// (a browser polling loop today, Vercel Cron or another scheduler later)
+// without ever processing the same row twice.
+// ---------------------------------------------------------------------------
+
+export const JOB_STALE_LOCK_MS = 2 * 60 * 1000; // 2 minutes
+export const ROW_STALE_GENERATING_MS = 90 * 1000; // 90 seconds
+
+/** Shared staleness rule for both a job's lock and a row stuck in "generating" -- one formula, two call sites. */
+export function isLockStale(lockedAt: string | null, staleMs: number, now: number = Date.now()): boolean {
+  if (!lockedAt) return false;
+  return now - new Date(lockedAt).getTime() > staleMs;
+}
+
+/** What a job's status becomes after one batch, given the campaign's resulting status. */
+export function jobStatusAfterBatch(campaignStatus: CampaignStatus): JobStatus {
+  return campaignStatus === "completed" ? "completed" : "pending";
+}
+
+/**
+ * Rows can be left stuck in "generating" if a process crashed mid-batch
+ * (server restart, function timeout) after claiming them but before
+ * writing a final status. Anything stuck past ROW_STALE_GENERATING_MS is
+ * released back to "pending" so it becomes claimable again -- recovering
+ * the row, not duplicating it (it was never actually finished).
+ */
+async function recoverStaleGeneratingRows(campaignId: string): Promise<number> {
+  const supabase = createServiceRoleClient();
+  const staleBefore = new Date(Date.now() - ROW_STALE_GENERATING_MS).toISOString();
+
+  const { data, error } = await supabase
+    .from("campaign_rows")
+    .update({ status: "pending" })
+    .eq("campaign_id", campaignId)
+    .eq("status", "generating")
+    .lt("updated_at", staleBefore)
+    .select("id");
+
+  if (error) throw new Error(`Failed to recover stale rows: ${error.message}`);
+  return data?.length ?? 0;
+}
+
+/**
+ * Claims a job for processing: succeeds only if the job is "pending", or
+ * is "running" with a lock older than JOB_STALE_LOCK_MS (a previous worker
+ * that crashed without releasing it). The WHERE clause is re-checked by
+ * Postgres atomically inside the UPDATE itself, so two concurrent calls
+ * can never both claim the same job -- whichever UPDATE commits first
+ * "wins"; the second matches zero rows and gets null back. Same documented
+ * simplification as Phase 5's row-claiming: not `FOR UPDATE SKIP LOCKED`,
+ * but correct against double-claiming.
+ */
+async function claimJob(jobId: string): Promise<JobRow | null> {
+  const supabase = createServiceRoleClient();
+
+  const { data: existing, error: readError } = await supabase
+    .from("jobs")
+    .select("*")
+    .eq("id", jobId)
+    .maybeSingle();
+
+  if (readError) throw new Error(`Failed to load job: ${readError.message}`);
+  if (!existing) return null;
+
+  const staleBefore = new Date(Date.now() - JOB_STALE_LOCK_MS).toISOString();
+
+  const { data: claimed, error: updateError } = await supabase
+    .from("jobs")
+    .update({ status: "running", locked_at: new Date().toISOString(), attempts: existing.attempts + 1 })
+    .eq("id", jobId)
+    .or(`status.eq.pending,and(status.eq.running,locked_at.lt.${staleBefore})`)
+    .select()
+    .maybeSingle();
+
+  if (updateError) throw new Error(`Failed to claim job: ${updateError.message}`);
+  return claimed;
+}
+
+export interface JobInfo {
+  id: string;
+  status: JobStatus;
+  attempts: number;
+  lastError: string | null;
+}
+
+function toJobInfo(job: JobRow): JobInfo {
+  return { id: job.id, status: job.status, attempts: job.attempts, lastError: job.last_error };
+}
+
+export interface ProcessJobResult {
+  /** False when another worker already holds a fresh lock on this job -- not an error, just "try again shortly." */
+  claimed: boolean;
+  job: JobInfo;
+  campaignId: string;
+  batch: { generated: number; failed: number } | null;
+  progress: CampaignProgress;
+}
+
+/**
+ * Processes exactly one bounded batch for whatever campaign this job
+ * belongs to, then returns -- the reusable worker function requirement 4
+ * asks for. The job id is the only client-supplied input; campaign,
+ * template, and rows are all resolved server-side from it, never trusted
+ * from the caller (see the route handler).
+ */
+export async function processGenerationJob(jobId: string, requestedBatchSize?: number): Promise<ProcessJobResult> {
+  const supabase = createServiceRoleClient();
+
+  const claimedJob = await claimJob(jobId);
+
+  if (!claimedJob) {
+    const { data: existing, error } = await supabase.from("jobs").select("*").eq("id", jobId).maybeSingle();
+    if (error) throw new Error(`Failed to load job: ${error.message}`);
+    if (!existing) throw new Error("Job not found.");
+
+    const progress = await computeCampaignProgress(existing.campaign_id);
+    return {
+      claimed: false,
+      job: toJobInfo(existing),
+      campaignId: existing.campaign_id,
+      batch: null,
+      progress,
+    };
+  }
+
+  try {
+    await recoverStaleGeneratingRows(claimedJob.campaign_id);
+
+    const batchSize = clampBatchSize(requestedBatchSize ?? claimedJob.batch_end);
+    const result = await generateCertificatesBatch(claimedJob.campaign_id, batchSize);
+    const nextStatus = jobStatusAfterBatch(result.campaignStatus);
+
+    const { data: updatedJob, error: updateError } = await supabase
+      .from("jobs")
+      .update({ status: nextStatus, locked_at: null, last_error: null })
+      .eq("id", jobId)
+      .select()
+      .single();
+
+    if (updateError) throw new Error(`Failed to update job: ${updateError.message}`);
+
+    const progress = await computeCampaignProgress(claimedJob.campaign_id);
+
+    return {
+      claimed: true,
+      job: toJobInfo(updatedJob),
+      campaignId: claimedJob.campaign_id,
+      batch: { generated: result.generated, failed: result.failed },
+      progress,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await supabase.from("jobs").update({ status: "failed", locked_at: null, last_error: message }).eq("id", jobId);
+    throw new Error(message);
+  }
 }

@@ -2,10 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getCampaign, listCampaignRows } from "@/lib/campaigns";
 import { getTemplate } from "@/lib/templates";
+import { computeCampaignProgress } from "@/lib/campaigns/generation";
+import { getLatestGenerationJob } from "@/lib/campaigns/jobs";
 import { PageContainer } from "@/components/layout/PageContainer";
-import { StatCard } from "@/components/ui/StatCard";
 import { Badge } from "@/components/ui/Badge";
-import { CampaignActions } from "@/components/campaigns/CampaignActions";
+import { GenerationPanel } from "@/components/campaigns/GenerationPanel";
 import { formatDate } from "@/lib/format";
 import type { BadgeVariant } from "@/components/ui/Badge";
 
@@ -29,14 +30,12 @@ export default async function CampaignDetailPage({
     notFound();
   }
 
-  const [template, rows] = await Promise.all([
+  const [template, rows, progress, job] = await Promise.all([
     getTemplate(campaign.template_id),
     listCampaignRows(campaignId),
+    computeCampaignProgress(campaignId),
+    getLatestGenerationJob(campaignId),
   ]);
-
-  const pendingCount = rows.filter((r) => r.status === "pending").length;
-  const generatedCount = rows.filter((r) => r.status === "generated").length;
-  const failedCount = rows.filter((r) => r.status === "failed").length;
 
   return (
     <PageContainer>
@@ -54,14 +53,16 @@ export default async function CampaignDetailPage({
           </p>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-4">
-          <StatCard label="Total rows" value={rows.length} />
-          <StatCard label="Pending" value={pendingCount} />
-          <StatCard label="Generated" value={generatedCount} />
-          <StatCard label="Failed" value={failedCount} />
+        <div className="rounded-xl border border-slate-200 bg-white p-5">
+          <h2 className="mb-3 text-sm font-semibold text-slate-900">Certificate generation</h2>
+          <GenerationPanel
+            campaignId={campaign.id}
+            initialJob={
+              job ? { id: job.id, status: job.status, attempts: job.attempts, lastError: job.last_error } : null
+            }
+            initialProgress={progress}
+          />
         </div>
-
-        <CampaignActions campaignId={campaign.id} pendingCount={pendingCount} failedCount={failedCount} />
 
         <div className="overflow-x-auto rounded-lg border border-slate-200">
           <table className="min-w-full divide-y divide-slate-200 text-sm">

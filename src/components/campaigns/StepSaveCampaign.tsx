@@ -30,11 +30,9 @@ export function StepSaveCampaign({
     return (
       <Alert variant="success">
         <p className="font-medium">Campaign saved.</p>
-        <p className="mt-1">
-          {summary.valid} of {summary.total} rows are ready for generation in a later phase.
-        </p>
-        <Link href="/campaigns" className="mt-2 inline-block font-medium underline">
-          View campaigns
+        <p className="mt-1">{summary.valid} of {summary.total} rows are ready for generation.</p>
+        <Link href={`/campaigns/${savedCampaignId}`} className="mt-2 inline-block font-medium underline">
+          View campaign
         </Link>
       </Alert>
     );

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getTemplate, downloadTemplateSvg } from "@/lib/templates";
 import { getPdfRenderer } from "@/lib/pdf";
 import { buildTestOverlays } from "@/lib/pdf/testOverlay";
+import { resolvePdfPageSize } from "@/lib/pdf/pageSize";
 
 /**
  * Experimental Phase 2.5 fidelity spike. Renders the template's already
@@ -24,13 +25,14 @@ export async function GET(
   const svg = await downloadTemplateSvg(template.svg_path);
   const overlays = buildTestOverlays(template.svg_width, template.svg_height);
   const renderer = getPdfRenderer();
+  const pageSize = resolvePdfPageSize(template.svg_width, template.svg_height);
 
   let result;
   try {
     result = await renderer.render({
       svg,
-      width: template.svg_width,
-      height: template.svg_height,
+      width: pageSize.widthPt,
+      height: pageSize.heightPt,
       overlays,
     });
   } catch (error) {

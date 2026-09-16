@@ -1,32 +1,58 @@
 import type { CSSProperties } from "react";
 import { getCssFontFamily } from "@/lib/fonts";
-import { computeFittedFontSize } from "./autoFit";
+import { measureTextWidth, measureLineHeight } from "./measureText";
+import { resolveFieldLayout } from "@/lib/pdf/textLayout";
 import type { EditorField } from "./types";
 
-export interface FittedFieldStyle {
+export interface FieldBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface FittedFieldLayout {
+  /** The resolved box to actually render, in the field's own SVG-unit space (unscaled) -- identical to the saved field box for fixed/fit_text, wider for auto_width. Callers position the on-screen element from this, not from `field` directly, so the box visibly grows in the editor. */
+  box: FieldBox;
   style: CSSProperties;
   overflowing: boolean;
 }
 
 /**
- * The one place a field's text style (font, size after auto-fit, color,
- * alignment) is computed for on-screen rendering. Used by both the Phase 3
- * field editor (FieldOverlay) and the Phase 4 recipient preview
- * (RecipientCanvas), so they can never drift into two different rendering
- * models for the same field data.
+ * The one place a field's on-screen box and text style are computed --
+ * used by both the Phase 3 field editor (FieldOverlay) and the Phase 4
+ * recipient preview (RecipientCanvas), calling the exact same
+ * resolveFieldLayout the PDF renderer uses, so all three can never drift
+ * into different rendering models for the same field data.
+ *
+ * `canvasWidth` (SVG units, optional) lets auto_width growth clamp itself
+ * to the certificate bounds; omit it to allow unclamped growth (e.g. a
+ * quick preview where the canvas size isn't at hand).
  */
-export function computeFieldTextStyle(field: EditorField, text: string, scale: number): FittedFieldStyle {
-  const { fontSize, overflowing } = computeFittedFontSize(field, text);
+export function computeFieldTextStyle(
+  field: EditorField,
+  text: string,
+  scale: number,
+  canvasWidth?: number,
+): FittedFieldLayout {
+  const cssFontFamily = getCssFontFamily(field.font_family);
+  const measurer = {
+    measureWidth: (t: string, size: number) => measureTextWidth(t, size, cssFontFamily, field.font_weight),
+    measureLineHeight: (size: number) => measureLineHeight(size, cssFontFamily, field.font_weight),
+  };
+
+  const layout = resolveFieldLayout(field, text, measurer, canvasWidth);
 
   return {
+    box: { x: layout.x, y: layout.y, width: layout.width, height: layout.height },
     style: {
       width: "100%",
       textAlign: field.text_align,
-      fontFamily: getCssFontFamily(field.font_family),
+      fontFamily: cssFontFamily,
       fontWeight: field.font_weight,
-      fontSize: Math.max(fontSize * scale, 1),
+      fontSize: Math.max(layout.fontSize * scale, 1),
       color: field.font_color,
     },
-    overflowing,
+    overflowing: layout.overflowing,
   };
 }

@@ -4,6 +4,7 @@
 
 export type TemplateStatus = "draft" | "published";
 export type TextAlign = "left" | "center" | "right";
+export type FieldSizingMode = "fixed" | "auto_width" | "fit_text";
 export type CampaignStatus =
   | "draft"
   | "mapped"
@@ -67,6 +68,8 @@ export interface Database {
           auto_fit_text: boolean;
           min_font_size: number | null;
           max_font_size: number | null;
+          sizing_mode: FieldSizingMode;
+          max_width: number | null;
           is_required: boolean;
           sort_order: number;
           created_at: string;
@@ -89,6 +92,8 @@ export interface Database {
           auto_fit_text?: boolean;
           min_font_size?: number | null;
           max_font_size?: number | null;
+          sizing_mode?: FieldSizingMode;
+          max_width?: number | null;
           is_required?: boolean;
           sort_order?: number;
         };

@@ -45,9 +45,9 @@ export function FieldOverlay({
   onChange,
   onDelete,
 }: FieldOverlayProps) {
-  const { style: textStyle, overflowing } = useMemo(
-    () => computeFieldTextStyle(field, previewText, scale),
-    [field, previewText, scale],
+  const { box, style: textStyle, overflowing } = useMemo(
+    () => computeFieldTextStyle(field, previewText, scale, canvasWidth),
+    [field, previewText, scale, canvasWidth],
   );
 
   function handleDragPointerDown(event: React.PointerEvent) {
@@ -111,10 +111,10 @@ export function FieldOverlay({
     <div
       onPointerDown={handleDragPointerDown}
       style={{
-        left: field.x * scale,
-        top: field.y * scale,
-        width: field.width * scale,
-        height: field.height * scale,
+        left: box.x * scale,
+        top: box.y * scale,
+        width: box.width * scale,
+        height: box.height * scale,
       }}
       className={cn(
         "absolute flex cursor-move items-center overflow-hidden border-2 bg-indigo-500/10",

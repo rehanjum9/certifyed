@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getTemplate } from "@/lib/templates";
 import { saveTemplateFields } from "@/lib/templateFields";
-import { templateFieldInputSchema } from "@/lib/validation/templateField";
+import { templateFieldInputSchema, formatValidationIssue } from "@/lib/validation/templateField";
 
 const saveFieldsBodySchema = z.object({
   fields: z.array(templateFieldInputSchema),
@@ -28,10 +28,7 @@ export async function PUT(
 
   const parsed = saveFieldsBodySchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: parsed.error.issues[0]?.message ?? "Invalid field data." },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: formatValidationIssue(parsed.error) }, { status: 400 });
   }
 
   const keys = parsed.data.fields.map((field) => field.field_key);

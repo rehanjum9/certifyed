@@ -2,6 +2,7 @@ import { createServiceRoleClient } from "@/lib/supabase/server";
 import type { Database } from "@/types/database";
 
 export type CampaignRow = Database["public"]["Tables"]["campaigns"]["Row"];
+export type CampaignRowRecord = Database["public"]["Tables"]["campaign_rows"]["Row"];
 
 export interface CampaignListItem extends CampaignRow {
   templateName: string | null;
@@ -47,4 +48,36 @@ export async function listCampaigns(): Promise<CampaignListItem[]> {
     templateName: templateNameById.get(campaign.template_id) ?? null,
     rowCount: countByCampaignId.get(campaign.id) ?? 0,
   }));
+}
+
+export async function getCampaign(campaignId: string): Promise<CampaignRow | null> {
+  const supabase = createServiceRoleClient();
+  const { data, error } = await supabase.from("campaigns").select("*").eq("id", campaignId).maybeSingle();
+  if (error) throw new Error(`Failed to load campaign: ${error.message}`);
+  return data;
+}
+
+export async function listCampaignRows(campaignId: string): Promise<CampaignRowRecord[]> {
+  const supabase = createServiceRoleClient();
+  const { data, error } = await supabase
+    .from("campaign_rows")
+    .select("*")
+    .eq("campaign_id", campaignId)
+    .order("row_index", { ascending: true });
+
+  if (error) throw new Error(`Failed to load campaign rows: ${error.message}`);
+  return data ?? [];
+}
+
+export async function getCampaignRow(campaignId: string, rowId: string): Promise<CampaignRowRecord | null> {
+  const supabase = createServiceRoleClient();
+  const { data, error } = await supabase
+    .from("campaign_rows")
+    .select("*")
+    .eq("campaign_id", campaignId)
+    .eq("id", rowId)
+    .maybeSingle();
+
+  if (error) throw new Error(`Failed to load campaign row: ${error.message}`);
+  return data;
 }

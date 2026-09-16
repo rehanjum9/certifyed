@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { listCampaigns } from "@/lib/campaigns";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -50,18 +51,20 @@ export default async function CampaignsPage() {
         ) : (
           <div className="flex flex-col gap-3">
             {campaigns.map((campaign) => (
-              <Card key={campaign.id} className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-semibold text-slate-900">{campaign.name}</h3>
-                    <Badge variant={statusVariant(campaign.status)}>{campaign.status}</Badge>
+              <Link key={campaign.id} href={`/campaigns/${campaign.id}`}>
+                <Card className="flex flex-col gap-2 p-4 transition-colors hover:border-slate-300 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-semibold text-slate-900">{campaign.name}</h3>
+                      <Badge variant={statusVariant(campaign.status)}>{campaign.status}</Badge>
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      Template: {campaign.templateName ?? "(deleted)"} - {campaign.rowCount} row
+                      {campaign.rowCount === 1 ? "" : "s"} - created {formatDate(campaign.created_at)}
+                    </p>
                   </div>
-                  <p className="text-xs text-slate-500">
-                    Template: {campaign.templateName ?? "(deleted)"} - {campaign.rowCount} row
-                    {campaign.rowCount === 1 ? "" : "s"} - created {formatDate(campaign.created_at)}
-                  </p>
-                </div>
-              </Card>
+                </Card>
+              </Link>
             ))}
           </div>
         )}

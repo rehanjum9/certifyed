@@ -51,7 +51,7 @@ export function RecipientCanvas({ svg, svgWidth, svgHeight, fields, values }: Re
         <div className="absolute inset-0">
           {fields.map((field) => {
             const text = values[field.field_key] ?? "";
-            const { style, overflowing } = computeFieldTextStyle(field, text, scale);
+            const { box, style, overflowing } = computeFieldTextStyle(field, text, scale, svgWidth);
 
             return (
               <div
@@ -61,10 +61,10 @@ export function RecipientCanvas({ svg, svgWidth, svgHeight, fields, values }: Re
                   overflowing && "outline outline-2 outline-red-500",
                 )}
                 style={{
-                  left: field.x * scale,
-                  top: field.y * scale,
-                  width: field.width * scale,
-                  height: field.height * scale,
+                  left: box.x * scale,
+                  top: box.y * scale,
+                  width: box.width * scale,
+                  height: box.height * scale,
                 }}
               >
                 <span style={style} className="overflow-hidden whitespace-nowrap px-0.5">

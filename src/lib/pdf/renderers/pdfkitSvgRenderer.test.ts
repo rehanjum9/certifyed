@@ -38,6 +38,23 @@ function isPdfBuffer(buffer: Buffer): boolean {
   return buffer.subarray(0, 5).toString("latin1") === "%PDF-";
 }
 
+function baseOverlay(overrides: Partial<TextOverlay> = {}): TextOverlay {
+  return {
+    text: "Ali Khan",
+    x: 40,
+    y: 150,
+    width: 320,
+    height: 40,
+    align: "center",
+    sizingMode: "fit_text",
+    fontSize: 32,
+    minFontSize: 10,
+    maxFontSize: 32,
+    maxWidth: null,
+    ...overrides,
+  };
+}
+
 describe("pdfkitSvgRenderer", () => {
   it("renders a real-shaped SVG (defs/clipPath/mask/transform/gradient/embedded image) to a vector PDF", async () => {
     const result = await pdfkitSvgRenderer.render({
@@ -66,22 +83,11 @@ describe("pdfkitSvgRenderer", () => {
   it.each(["Ali Khan", "Muhammad Abdullah Khan", "José García", "Zoë Smith"])(
     "draws the overlay name '%s' as vector text without throwing",
     async (name) => {
-      const overlay: TextOverlay = {
-        text: name,
-        x: 40,
-        y: 150,
-        width: 320,
-        height: 40,
-        startFontSize: 32,
-        minFontSize: 10,
-        align: "center",
-      };
-
       const result = await pdfkitSvgRenderer.render({
         svg: FIDELITY_TEST_SVG,
         width: 400,
         height: 300,
-        overlays: [overlay],
+        overlays: [baseOverlay({ text: name })],
       });
 
       expect(isPdfBuffer(result.buffer)).toBe(true);
@@ -89,27 +95,84 @@ describe("pdfkitSvgRenderer", () => {
     },
   );
 
-  it("shrinks the primary test name to fit its box instead of overflowing silently", async () => {
-    const overlay: TextOverlay = {
-      text: "Muhammad Abdullah Khan",
-      x: 0,
-      y: 0,
-      width: 60, // deliberately too narrow at the starting font size
-      height: 30,
-      startFontSize: 40,
-      minFontSize: 6,
-      align: "left",
-    };
-
+  it("shrinks a fit_text name to fit its box instead of overflowing silently", async () => {
     const result = await pdfkitSvgRenderer.render({
       svg: FIDELITY_TEST_SVG,
       width: 400,
       height: 300,
-      overlays: [overlay],
+      overlays: [
+        baseOverlay({
+          text: "Muhammad Abdullah Khan",
+          x: 0,
+          y: 0,
+          width: 60, // deliberately too narrow at the starting font size
+          height: 30,
+          align: "left",
+          fontSize: 40,
+          minFontSize: 6,
+          maxFontSize: 40,
+        }),
+      ],
     });
 
     expect(isPdfBuffer(result.buffer)).toBe(true);
     // Still too long even at the minimum -- should be reported, not hidden.
     expect(result.warnings.some((w) => w.includes("Muhammad Abdullah Khan"))).toBe(true);
+  });
+
+  it("renders a serial_number-shaped fixed field (short box, small height) without error or warning", async () => {
+    // Regression shape for the editor-to-PDF position bug: a short, wide,
+    // shallow box like a real "Sr. No:" field -- previously PDFKit
+    // anchored text to the top of this box instead of centering it like
+    // the browser preview does; see ../textLayout.ts for the actual fix
+    // and its exhaustive position-correctness tests.
+    const result = await pdfkitSvgRenderer.render({
+      svg: FIDELITY_TEST_SVG,
+      width: 400,
+      height: 300,
+      overlays: [
+        baseOverlay({
+          text: "CERT-003",
+          x: 30,
+          y: 250,
+          width: 150,
+          height: 20,
+          align: "left",
+          sizingMode: "fixed",
+          fontSize: 12,
+          minFontSize: null,
+          maxFontSize: null,
+        }),
+      ],
+    });
+
+    expect(isPdfBuffer(result.buffer)).toBe(true);
+    expect(result.warnings).toEqual([]);
+  });
+
+  it("grows an auto_width name overlay end-to-end without wrapping or truncation", async () => {
+    const result = await pdfkitSvgRenderer.render({
+      svg: FIDELITY_TEST_SVG,
+      width: 400,
+      height: 300,
+      overlays: [
+        baseOverlay({
+          text: "Muhammad Abdullah Khan",
+          x: 100,
+          y: 150,
+          width: 80,
+          height: 30,
+          align: "center",
+          sizingMode: "auto_width",
+          fontSize: 20,
+          minFontSize: 10,
+          maxFontSize: null,
+          maxWidth: 350,
+        }),
+      ],
+    });
+
+    expect(isPdfBuffer(result.buffer)).toBe(true);
+    expect(result.warnings).toEqual([]);
   });
 });

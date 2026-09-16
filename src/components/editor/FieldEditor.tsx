@@ -7,14 +7,18 @@ import { FieldPropertiesPanel } from "./FieldPropertiesPanel";
 import { EditorCanvas } from "./EditorCanvas";
 import { ZoomControls } from "./ZoomControls";
 import { computeFitToScreenScale } from "@/lib/editor/coordinates";
-import { computeFittedFontSize } from "@/lib/editor/autoFit";
+import { computeFieldTextStyle } from "@/lib/editor/fieldTextStyle";
 import {
   createDefaultField,
   defaultPreviewValueFor,
   templateFieldRowToEditorField,
   type EditorField,
 } from "@/lib/editor/types";
-import { templateFieldInputSchema, type TemplateFieldInput } from "@/lib/validation/templateField";
+import {
+  templateFieldInputSchema,
+  formatValidationIssue,
+  type TemplateFieldInput,
+} from "@/lib/validation/templateField";
 import type { TemplateFieldRow } from "@/lib/templateFields";
 
 const MIN_ZOOM = 25;
@@ -115,8 +119,8 @@ export function FieldEditor({ template, svg, initialFields }: FieldEditorProps) 
   const selectedFieldOverflowing = useMemo(() => {
     if (!selectedField) return false;
     const preview = previewValues[selectedField.field_key] ?? "";
-    return computeFittedFontSize(selectedField, preview).overflowing;
-  }, [selectedField, previewValues]);
+    return computeFieldTextStyle(selectedField, preview, 1, template.svg_width).overflowing;
+  }, [selectedField, previewValues, template.svg_width]);
 
   async function handleSave() {
     const inputs = fields.map(editorFieldToInput);
@@ -125,7 +129,7 @@ export function FieldEditor({ template, svg, initialFields }: FieldEditorProps) 
       const result = templateFieldInputSchema.safeParse(input);
       if (!result.success) {
         setSaveState("error");
-        setSaveError(result.error.issues[0]?.message ?? "A field is invalid.");
+        setSaveError(`"${input.label}": ${formatValidationIssue(result.error)}`);
         return;
       }
     }

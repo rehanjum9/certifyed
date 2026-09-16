@@ -19,9 +19,12 @@ export function buildTestOverlays(width: number, height: number): TextOverlay[] 
     y: height * 0.52,
     width: width * 0.7,
     height: 60,
-    startFontSize: 36,
-    minFontSize: 14,
     align: "center",
+    sizingMode: "fit_text",
+    fontSize: 36,
+    minFontSize: 14,
+    maxFontSize: 36,
+    maxWidth: null,
     color: "#111827",
   };
 
@@ -34,9 +37,12 @@ export function buildTestOverlays(width: number, height: number): TextOverlay[] 
     y: stripY + index * stripLineHeight,
     width: width - 40,
     height: stripLineHeight,
-    startFontSize: 16,
-    minFontSize: 8,
     align: "left",
+    sizingMode: "fit_text",
+    fontSize: 16,
+    minFontSize: 8,
+    maxFontSize: 16,
+    maxWidth: null,
     color: "#4338ca",
   }));
 

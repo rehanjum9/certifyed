@@ -117,8 +117,8 @@ export function FieldOverlay({
         height: box.height * scale,
       }}
       className={cn(
-        "absolute flex cursor-move items-center overflow-hidden border-2 bg-indigo-500/10",
-        selected ? "border-indigo-600" : "border-indigo-300/70 hover:border-indigo-500",
+        "absolute flex cursor-move items-center overflow-hidden border-2 bg-emerald-500/10",
+        selected ? "border-emerald-600" : "border-emerald-300/70 hover:border-emerald-500",
         overflowing && "border-red-500 bg-red-500/10",
       )}
     >
@@ -136,7 +136,7 @@ export function FieldOverlay({
               key={handle}
               onPointerDown={handleResizePointerDown(handle)}
               className={cn(
-                "absolute h-3 w-3 rounded-full border-2 border-white bg-indigo-600 shadow",
+                "absolute h-3 w-3 rounded-full border-2 border-white bg-emerald-600 shadow",
                 HANDLE_POSITION_CLASS[handle],
               )}
             />

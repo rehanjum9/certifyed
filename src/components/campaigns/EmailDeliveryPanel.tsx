@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/Button";
 import { Spinner } from "@/components/ui/Spinner";
 import { Alert } from "@/components/ui/Alert";
 import { Input, Label } from "@/components/ui/Input";
+import { Badge } from "@/components/ui/Badge";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 
 export interface EmailJobInfo {
   id: string;
@@ -209,19 +211,19 @@ export function EmailDeliveryPanel({ campaignId, initialJob, initialProgress }: 
           Send Certificates
         </Button>
       ) : (
-        <div className="flex flex-col gap-2">
-          <p className="text-sm font-medium text-slate-900">
-            {running ? "Sending certificates..." : isActive ? "Sending paused" : "Sending complete"}
-          </p>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
-            <div
-              className="h-full bg-emerald-600 transition-all"
-              style={{ width: `${progress.progressPercent}%` }}
-            />
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-slate-900">
+              {running ? "Sending certificates..." : isActive ? "Sending paused" : "Sending complete"}
+            </span>
+            <Badge variant={running ? "info" : isActive ? "neutral" : "success"} bracket={false}>
+              {running ? "Sending" : isActive ? "Paused" : "Completed"}
+            </Badge>
           </div>
-          <p className="text-sm text-slate-600">
+          <ProgressBar percent={progress.progressPercent} tone="sky" />
+          <p className="font-mono text-xs text-slate-500">
             {progress.sent} / {progress.eligibleTotal} sent
-            {progress.failed > 0 && ` – ${progress.failed} failed`} – {progress.pending} pending –{" "}
+            {progress.failed > 0 && ` — ${progress.failed} failed`} — {progress.pending} pending —{" "}
             {progress.progressPercent}%
           </p>
           {isActive && !running && (
@@ -254,8 +256,11 @@ export function EmailDeliveryPanel({ campaignId, initialJob, initialProgress }: 
       {job?.lastError && !isActive && <Alert variant="error">Last error: {job.lastError}</Alert>}
       {error && <Alert variant="error">{error}</Alert>}
 
-      <div className="rounded-lg border border-dashed border-slate-300 p-3">
-        <p className="mb-2 text-xs font-medium text-slate-500">Send a test email before bulk sending</p>
+      <div className="rounded-lg border border-dashed border-amber-300 bg-amber-50/40 p-3">
+        <div className="mb-2 flex items-center gap-2">
+          <Badge variant="warning">Test mode</Badge>
+          <p className="text-xs font-medium text-slate-600">Send a test email before bulk sending</p>
+        </div>
         <div className="flex flex-wrap items-end gap-2">
           <div className="min-w-[220px] flex-1">
             <Label htmlFor="test-email-input">Test recipient (optional if a dev address is configured)</Label>

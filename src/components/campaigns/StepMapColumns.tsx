@@ -48,10 +48,10 @@ export function StepMapColumns({
 }: StepMapColumnsProps) {
   return (
     <div className="flex max-w-2xl flex-col gap-6">
-      <section className="flex flex-col gap-2 rounded-lg border-2 border-indigo-200 bg-indigo-50/50 p-4">
+      <section className="flex flex-col gap-2 rounded-lg border-2 border-sky-200 bg-sky-50/50 p-4">
         <div className="flex items-center gap-2">
-          <h2 className="text-sm font-semibold text-slate-900">Recipient Email</h2>
-          <Badge variant="info">Mandatory - never shown on the certificate</Badge>
+          <h2 className="font-mono text-sm font-semibold text-slate-900">recipient_email</h2>
+          <Badge variant="info" bracket={false}>Mandatory — never shown on the certificate</Badge>
         </div>
         <p className="text-xs text-slate-500">
           Every roster row needs an email so its certificate can be delivered later. This column is
@@ -66,7 +66,7 @@ export function StepMapColumns({
       </section>
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-semibold text-slate-900">Certificate Fields</h2>
+        <h2 className="font-mono text-sm font-semibold text-slate-900">certificate_fields</h2>
         {fields.length === 0 ? (
           <p className="text-sm text-slate-500">This template has no dynamic fields configured.</p>
         ) : (
@@ -75,7 +75,7 @@ export function StepMapColumns({
               <div key={field.id} className="flex flex-col gap-1.5 rounded-lg border border-slate-200 p-4">
                 <div className="flex items-center gap-2">
                   <Label>{field.label}</Label>
-                  <Badge variant={field.is_required ? "warning" : "neutral"}>
+                  <Badge variant={field.is_required ? "warning" : "neutral"} bracket={false}>
                     {field.is_required ? "Required" : "Optional"}
                   </Badge>
                 </div>

@@ -1,7 +1,6 @@
 import { listTemplates, downloadTemplateSvg } from "@/lib/templates";
 import { listTemplateFields } from "@/lib/templateFields";
 import { PageContainer } from "@/components/layout/PageContainer";
-import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { LinkButton } from "@/components/ui/Button";
 import { IconTemplates, IconPlus } from "@/components/ui/icons";
@@ -24,7 +23,12 @@ export default async function NewCampaignPage() {
   return (
     <PageContainer>
       <div className="flex flex-col gap-6">
-        <PageHeader title="New campaign" description="Map a spreadsheet roster onto a certificate template." />
+        <div>
+          <h1 className="font-mono text-2xl font-semibold tracking-tight text-slate-900">
+            <span className="text-emerald-600">&gt;</span> new_campaign_
+          </h1>
+          <p className="mt-1 text-sm text-slate-500">Map a spreadsheet roster onto a certificate template.</p>
+        </div>
 
         {templateOptions.length === 0 ? (
           <EmptyState

@@ -63,8 +63,15 @@ export function FieldPropertiesPanel({
 }: FieldPropertiesPanelProps) {
   if (!field) {
     return (
-      <div className="flex h-full flex-col items-center justify-center p-6 text-center">
-        <p className="text-sm text-slate-500">Select a field to edit its properties.</p>
+      <div className="flex h-full flex-col">
+        <div className="border-b border-slate-200 p-4">
+          <h2 className="font-mono text-sm font-semibold text-slate-900">
+            <span className="text-emerald-600">&gt;</span> properties_
+          </h2>
+        </div>
+        <div className="flex flex-1 flex-col items-center justify-center p-6 text-center">
+          <p className="text-sm text-slate-500">Select a field to edit its properties.</p>
+        </div>
       </div>
     );
   }
@@ -77,8 +84,13 @@ export function FieldPropertiesPanel({
   }
 
   return (
-    <div className="flex h-full flex-col overflow-y-auto p-4">
-      <div className="flex flex-col gap-5">
+    <div className="flex h-full flex-col overflow-y-auto">
+      <div className="border-b border-slate-200 p-4">
+        <h2 className="font-mono text-sm font-semibold text-slate-900">
+          <span className="text-emerald-600">&gt;</span> properties_
+        </h2>
+      </div>
+      <div className="flex flex-col gap-5 p-4">
         <section className="flex flex-col gap-3">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Identity</h3>
 
@@ -107,7 +119,7 @@ export function FieldPropertiesPanel({
               type="checkbox"
               checked={field.is_required}
               onChange={(e) => onChangeField({ is_required: e.target.checked })}
-              className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
             />
             Required
           </label>
@@ -239,7 +251,7 @@ export function FieldPropertiesPanel({
                   className={cn(
                     "flex-1 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors",
                     field.text_align === option.value
-                      ? "border-indigo-600 bg-indigo-50 text-indigo-700"
+                      ? "border-emerald-600 bg-emerald-50 text-emerald-700"
                       : "border-slate-300 text-slate-600 hover:bg-slate-50",
                   )}
                 >
@@ -264,7 +276,7 @@ export function FieldPropertiesPanel({
                   className={cn(
                     "flex-1 rounded-md border px-2 py-1.5 text-xs font-medium transition-colors",
                     field.sizing_mode === option.value
-                      ? "border-indigo-600 bg-indigo-50 text-indigo-700"
+                      ? "border-emerald-600 bg-emerald-50 text-emerald-700"
                       : "border-slate-300 text-slate-600 hover:bg-slate-50",
                   )}
                 >

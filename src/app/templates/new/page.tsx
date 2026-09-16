@@ -5,7 +5,6 @@ import Link from "next/link";
 import { SvgPreview } from "@/components/templates/SvgPreview";
 import { MAX_SVG_UPLOAD_BYTES } from "@/lib/svg/constants";
 import { PageContainer } from "@/components/layout/PageContainer";
-import { PageHeader } from "@/components/ui/PageHeader";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Label, Input } from "@/components/ui/Input";
 import { Alert } from "@/components/ui/Alert";
@@ -123,10 +122,12 @@ export default function NewTemplatePage() {
   return (
     <PageContainer>
     <div className="flex flex-col gap-6">
-      <PageHeader
-        title="New template"
-        description="Upload a Canva-exported SVG to use as a certificate design."
-      />
+      <div>
+        <h1 className="font-mono text-2xl font-semibold tracking-tight text-slate-900">
+          <span className="text-emerald-600">&gt;</span> new_template_
+        </h1>
+        <p className="mt-1 text-sm text-slate-500">Upload a Canva-exported SVG to use as a certificate design.</p>
+      </div>
 
       <Card className="max-w-xl">
         <CardContent className="pt-5">
@@ -150,7 +151,7 @@ export default function NewTemplatePage() {
                 type="file"
                 accept=".svg,image/svg+xml"
                 onChange={handleFileChange}
-                className="block w-full text-sm text-slate-600 file:mr-4 file:rounded-md file:border-0 file:bg-indigo-50 file:px-4 file:py-2 file:text-sm file:font-medium file:text-indigo-700 hover:file:bg-indigo-100"
+                className="block w-full text-sm text-slate-600 file:mr-4 file:rounded-md file:border-0 file:bg-emerald-50 file:px-4 file:py-2 file:text-sm file:font-medium file:text-emerald-700 hover:file:bg-emerald-100"
               />
             </div>
 
@@ -188,7 +189,7 @@ export default function NewTemplatePage() {
             />
             <Link
               href={`/templates/${result.id}`}
-              className="self-start text-sm font-medium text-indigo-600 hover:text-indigo-700"
+              className="self-start text-sm font-medium text-emerald-600 hover:text-emerald-700"
             >
               View template &rarr;
             </Link>

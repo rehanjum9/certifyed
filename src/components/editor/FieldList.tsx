@@ -17,7 +17,9 @@ export function FieldList({ fields, selectedFieldId, onSelect, onAdd, onDelete }
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b border-slate-200 p-4">
-        <h2 className="text-sm font-semibold text-slate-900">Fields</h2>
+        <h2 className="font-mono text-sm font-semibold text-slate-900">
+          <span className="text-emerald-600">&gt;</span> fields_
+        </h2>
         <Button size="sm" onClick={onAdd}>
           <IconPlus className="h-4 w-4" />
           Add field
@@ -39,7 +41,7 @@ export function FieldList({ fields, selectedFieldId, onSelect, onAdd, onDelete }
                   className={cn(
                     "flex flex-1 flex-col items-start gap-0.5 rounded-md px-3 py-2 text-left",
                     field.id === selectedFieldId
-                      ? "bg-indigo-50 text-indigo-700"
+                      ? "bg-emerald-50 text-emerald-700"
                       : "text-slate-600 hover:bg-slate-100",
                   )}
                 >

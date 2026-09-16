@@ -27,7 +27,7 @@ export function StepUploadSpreadsheet({ file, status, error, parsed, onFileSelec
 
   return (
     <div className="flex max-w-xl flex-col gap-4">
-      <h2 className="text-sm font-semibold text-slate-900">Upload a roster</h2>
+      <h2 className="font-mono text-sm font-semibold text-slate-900">upload_roster</h2>
       <p className="text-sm text-slate-500">
         Upload an .xlsx or .csv file with one row per recipient. Max {MAX_UPLOAD_MB}MB.
       </p>
@@ -40,7 +40,7 @@ export function StepUploadSpreadsheet({ file, status, error, parsed, onFileSelec
           type="file"
           accept=".csv,.xlsx"
           onChange={handleChange}
-          className="block w-full text-sm text-slate-600 file:mr-4 file:rounded-md file:border-0 file:bg-indigo-50 file:px-4 file:py-2 file:text-sm file:font-medium file:text-indigo-700 hover:file:bg-indigo-100"
+          className="block w-full text-sm text-slate-600 file:mr-4 file:rounded-md file:border-0 file:bg-emerald-50 file:px-4 file:py-2 file:text-sm file:font-medium file:text-emerald-700 hover:file:bg-emerald-100"
         />
       </div>
 

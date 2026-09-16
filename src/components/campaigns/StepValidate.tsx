@@ -2,6 +2,7 @@
 
 import { StatCard } from "@/components/ui/StatCard";
 import { Badge } from "@/components/ui/Badge";
+import { DataTable, DataTableHead, DataTableTh, DataTableBody, DataTableRow, DataTableTd } from "@/components/ui/DataTable";
 import type { ValidationOutcome } from "@/lib/spreadsheet/validateRows";
 
 interface StepValidateProps {
@@ -11,45 +12,41 @@ interface StepValidateProps {
 export function StepValidate({ outcome }: StepValidateProps) {
   return (
     <div className="flex flex-col gap-4">
-      <h2 className="text-sm font-semibold text-slate-900">Validation results</h2>
+      <h2 className="font-mono text-sm font-semibold text-slate-900">validation_results</h2>
 
       <div className="grid gap-4 sm:grid-cols-4">
-        <StatCard label="Total rows" value={outcome.summary.total} />
+        <StatCard label="Total" value={outcome.summary.total} />
         <StatCard label="Valid" value={outcome.summary.valid} />
         <StatCard label="Invalid" value={outcome.summary.invalid} />
         <StatCard label="Warnings" value={outcome.summary.warnings} />
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-slate-200">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50">
-            <tr>
-              <th className="px-3 py-2 text-left font-medium text-slate-500">Row</th>
-              <th className="px-3 py-2 text-left font-medium text-slate-500">Recipient Email</th>
-              <th className="px-3 py-2 text-left font-medium text-slate-500">Mapped values</th>
-              <th className="px-3 py-2 text-left font-medium text-slate-500">Status</th>
-              <th className="px-3 py-2 text-left font-medium text-slate-500">Validation errors</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {outcome.rows.map((row) => (
-              <tr key={row.rowIndex} className={row.status === "invalid" ? "bg-red-50/40" : undefined}>
-                <td className="px-3 py-2 text-slate-500">{row.rowIndex + 2}</td>
-                <td className="px-3 py-2 text-slate-700">{row.recipientEmail ?? "—"}</td>
-                <td className="px-3 py-2 text-slate-700">
-                  {Object.entries(row.data)
-                    .map(([key, value]) => `${key}: ${value || "—"}`)
-                    .join(", ") || "—"}
-                </td>
-                <td className="px-3 py-2">
-                  <Badge variant={row.status === "valid" ? "success" : "warning"}>{row.status}</Badge>
-                </td>
-                <td className="px-3 py-2 text-red-700">{row.errors.join(" ") || "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable>
+        <DataTableHead>
+          <DataTableTh>Row</DataTableTh>
+          <DataTableTh>Recipient email</DataTableTh>
+          <DataTableTh>Mapped values</DataTableTh>
+          <DataTableTh>Status</DataTableTh>
+          <DataTableTh>Validation errors</DataTableTh>
+        </DataTableHead>
+        <DataTableBody>
+          {outcome.rows.map((row) => (
+            <DataTableRow key={row.rowIndex} className={row.status === "invalid" ? "bg-red-50/40" : undefined}>
+              <DataTableTd className="font-mono text-xs text-slate-400">{row.rowIndex + 2}</DataTableTd>
+              <DataTableTd>{row.recipientEmail ?? "—"}</DataTableTd>
+              <DataTableTd>
+                {Object.entries(row.data)
+                  .map(([key, value]) => `${key}: ${value || "—"}`)
+                  .join(", ") || "—"}
+              </DataTableTd>
+              <DataTableTd>
+                <Badge variant={row.status === "valid" ? "success" : "danger"}>{row.status}</Badge>
+              </DataTableTd>
+              <DataTableTd className="text-red-600">{row.errors.join(" ") || "—"}</DataTableTd>
+            </DataTableRow>
+          ))}
+        </DataTableBody>
+      </DataTable>
     </div>
   );
 }

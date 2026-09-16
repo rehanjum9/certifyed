@@ -31,7 +31,7 @@ export function StepSaveCampaign({
       <Alert variant="success">
         <p className="font-medium">Campaign saved.</p>
         <p className="mt-1">{summary.valid} of {summary.total} rows are ready for generation.</p>
-        <Link href={`/campaigns/${savedCampaignId}`} className="mt-2 inline-block font-medium underline">
+        <Link href={`/campaigns/${savedCampaignId}`} className="mt-2 inline-block font-medium text-emerald-700 underline">
           View campaign
         </Link>
       </Alert>
@@ -40,7 +40,7 @@ export function StepSaveCampaign({
 
   return (
     <div className="flex max-w-xl flex-col gap-4">
-      <h2 className="text-sm font-semibold text-slate-900">Save campaign</h2>
+      <h2 className="font-mono text-sm font-semibold text-slate-900">save_campaign</h2>
 
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="campaign-name">Campaign name</Label>

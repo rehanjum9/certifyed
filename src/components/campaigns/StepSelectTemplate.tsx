@@ -13,7 +13,7 @@ interface StepSelectTemplateProps {
 export function StepSelectTemplate({ templateOptions, selectedTemplateId, onSelect }: StepSelectTemplateProps) {
   return (
     <div className="flex flex-col gap-4">
-      <h2 className="text-sm font-semibold text-slate-900">Select a certificate template</h2>
+      <h2 className="font-mono text-sm font-semibold text-slate-900">select_template</h2>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {templateOptions.map(({ template, svg, fields }) => {
           const selected = template.id === selectedTemplateId;
@@ -23,8 +23,8 @@ export function StepSelectTemplate({ templateOptions, selectedTemplateId, onSele
               type="button"
               onClick={() => onSelect(template.id)}
               className={cn(
-                "flex flex-col overflow-hidden rounded-xl border-2 bg-white text-left shadow-sm transition-colors",
-                selected ? "border-indigo-600" : "border-transparent hover:border-slate-300",
+                "flex flex-col overflow-hidden rounded-xl border-2 bg-white text-left transition-colors",
+                selected ? "border-emerald-500" : "border-transparent hover:border-slate-300",
               )}
             >
               <SvgPreview svg={svg} width={template.svg_width} height={template.svg_height} />

@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Spinner } from "@/components/ui/Spinner";
 import { Alert } from "@/components/ui/Alert";
+import { Badge } from "@/components/ui/Badge";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 
 export interface JobInfo {
   id: string;
@@ -183,19 +185,19 @@ export function GenerationPanel({ campaignId, initialJob, initialProgress }: Gen
           Generate Certificates
         </Button>
       ) : (
-        <div className="flex flex-col gap-2">
-          <p className="text-sm font-medium text-slate-900">
-            {running ? "Generating certificates..." : isActive ? "Generation paused" : "Certificates generated"}
-          </p>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
-            <div
-              className="h-full bg-indigo-600 transition-all"
-              style={{ width: `${progress.progressPercent}%` }}
-            />
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-slate-900">
+              {running ? "Generating certificates..." : isActive ? "Generation paused" : "Certificates generated"}
+            </span>
+            <Badge variant={running ? "info" : isActive ? "neutral" : "success"} bracket={false}>
+              {running ? "Processing" : isActive ? "Paused" : "Completed"}
+            </Badge>
           </div>
-          <p className="text-sm text-slate-600">
+          <ProgressBar percent={progress.progressPercent} tone="emerald" />
+          <p className="font-mono text-xs text-slate-500">
             {progress.generated} / {progress.eligibleTotal} generated
-            {progress.failed > 0 && ` – ${progress.failed} failed`} – {remaining} remaining –{" "}
+            {progress.failed > 0 && ` — ${progress.failed} failed`} — {remaining} remaining —{" "}
             {progress.progressPercent}%
           </p>
           {isActive && !running && (
@@ -226,8 +228,8 @@ export function GenerationPanel({ campaignId, initialJob, initialProgress }: Gen
       </div>
 
       {progress.invalidImportedTotal > 0 && (
-        <p className="text-xs text-slate-500">
-          Eligible rows: {progress.eligibleTotal} – Invalid imported rows: {progress.invalidImportedTotal}{" "}
+        <p className="font-mono text-xs text-slate-500">
+          Eligible rows: {progress.eligibleTotal} — Invalid imported rows: {progress.invalidImportedTotal}{" "}
           (excluded from generation; fix and re-import to include them).
         </p>
       )}

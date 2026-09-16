@@ -47,10 +47,14 @@ export default async function TemplateDetailPage({
                 {template.status}
               </Badge>
             </div>
-            <p className="mt-1 text-sm text-slate-500">
-              {template.svg_width} &times; {template.svg_height} viewBox units - created{" "}
-              {formatDate(template.created_at)} -{" "}
-              {fields.length === 0 ? "no fields yet" : `${fields.length} field${fields.length === 1 ? "" : "s"}`}
+            <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-500">
+              <span className="font-mono text-xs">
+                {template.svg_width} &times; {template.svg_height}
+              </span>
+              <span className="text-slate-300">&middot;</span>
+              <span>created {formatDate(template.created_at)}</span>
+              <span className="text-slate-300">&middot;</span>
+              <span>{fields.length === 0 ? "no fields yet" : `${fields.length} field${fields.length === 1 ? "" : "s"}`}</span>
             </p>
           </div>
           <Link
@@ -66,14 +70,14 @@ export default async function TemplateDetailPage({
             svg={svg}
             width={template.svg_width}
             height={template.svg_height}
-            className="mx-auto max-w-2xl rounded-lg shadow-sm"
+            className="mx-auto max-w-2xl rounded-lg"
           />
         </div>
 
-        <Card>
+        <Card className="border-dashed shadow-none">
           <CardHeader>
             <div className="flex items-center gap-2">
-              <CardTitle>PDF fidelity test</CardTitle>
+              <CardTitle className="text-slate-500">PDF fidelity test</CardTitle>
               <Badge variant="warning">Experimental</Badge>
             </div>
             <CardDescription>
@@ -87,7 +91,7 @@ export default async function TemplateDetailPage({
           <CardContent>
             <a
               href={`/api/templates/${template.id}/pdf-test`}
-              className={buttonClassName("secondary")}
+              className={buttonClassName("secondary", "sm")}
             >
               Generate PDF test
             </a>

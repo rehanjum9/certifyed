@@ -1,9 +1,17 @@
 @import "tailwindcss";
 
-/* Fixed light, neutral theme -- this app does not adapt to system dark mode. */
+/* Fixed light, neutral theme -- this app does not adapt to system dark mode.
+   The dark sidebar is a deliberate fixed-dark surface within the light
+   workspace, not a theme switch. */
 :root {
   --background: #f8fafc;
   --foreground: #0f172a;
+
+  /* CERTIFYED_ brand accents -- emerald/teal primary, restrained blue secondary. */
+  --brand-accent: #10b981;
+  --brand-accent-dark: #059669;
+  --brand-sidebar: #0f1a17;
+  --brand-sidebar-border: #1e2b27;
 }
 
 @theme inline {

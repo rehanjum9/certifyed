@@ -2,18 +2,19 @@ import Link from "next/link";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
-export type ButtonVariant = "primary" | "secondary" | "ghost";
+export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 export type ButtonSize = "sm" | "md";
 
 const base =
   "inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors " +
   "disabled:cursor-not-allowed disabled:opacity-50 " +
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2";
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2";
 
 const variantClasses: Record<ButtonVariant, string> = {
-  primary: "bg-indigo-600 text-white hover:bg-indigo-700",
+  primary: "bg-emerald-600 text-white hover:bg-emerald-700",
   secondary: "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
   ghost: "text-slate-600 hover:bg-slate-100",
+  danger: "bg-red-500 text-white hover:bg-red-600",
 };
 
 const sizeClasses: Record<ButtonSize, string> = {

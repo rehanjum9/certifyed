@@ -3,13 +3,22 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
-import { IconDashboard, IconTemplates, IconCampaigns, IconSettings } from "@/components/ui/icons";
+import {
+  IconDashboard,
+  IconTemplates,
+  IconCampaigns,
+  IconUsers,
+  IconStorage,
+  IconSettings,
+} from "@/components/ui/icons";
 
 const NAV_ITEMS = [
-  { href: "/", label: "Dashboard", icon: IconDashboard, exact: true },
-  { href: "/templates", label: "Templates", icon: IconTemplates, exact: false },
-  { href: "/campaigns", label: "Campaigns", icon: IconCampaigns, exact: false },
-  { href: "/settings", label: "Settings", icon: IconSettings, exact: false },
+  { href: "/", label: "Dashboard", icon: IconDashboard, exact: true, enabled: true },
+  { href: "/templates", label: "Templates", icon: IconTemplates, exact: false, enabled: true },
+  { href: "/campaigns", label: "Campaigns", icon: IconCampaigns, exact: false, enabled: true },
+  { href: "/recipients", label: "Recipients", icon: IconUsers, exact: false, enabled: false },
+  { href: "/storage", label: "Storage", icon: IconStorage, exact: false, enabled: false },
+  { href: "/settings", label: "Settings", icon: IconSettings, exact: false, enabled: true },
 ];
 
 interface SidebarProps {
@@ -24,7 +33,7 @@ export function Sidebar({ mobileOpen, onClose }: SidebarProps) {
     <>
       {mobileOpen && (
         <div
-          className="fixed inset-0 z-40 bg-slate-900/30 lg:hidden"
+          className="fixed inset-0 z-40 bg-slate-900/50 lg:hidden"
           onClick={onClose}
           aria-hidden="true"
         />
@@ -32,23 +41,41 @@ export function Sidebar({ mobileOpen, onClose }: SidebarProps) {
 
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-slate-200 bg-white transition-transform duration-200 lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-[#0f1a17] transition-transform duration-200 lg:translate-x-0",
           mobileOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
-        <div className="flex h-16 items-center gap-2 border-b border-slate-200 px-6">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-sm font-semibold text-white">
-            C
-          </div>
-          <span className="text-sm font-semibold text-slate-900">CertGen</span>
+        <div className="flex h-16 shrink-0 flex-col justify-center border-b border-white/10 px-6">
+          <span className="font-mono text-[15px] font-semibold tracking-tight text-white">
+            <span className="text-emerald-400">&gt;</span> CERTIFYED_
+          </span>
+          <span className="mt-0.5 truncate font-mono text-[10px] text-emerald-400/70">
+            generate. personalize. deliver.
+          </span>
         </div>
 
-        <nav className="flex flex-1 flex-col gap-1 p-4">
+        <nav className="flex flex-1 flex-col gap-1 p-3">
           {NAV_ITEMS.map((item) => {
-            const isActive = item.exact
-              ? pathname === item.href
-              : pathname === item.href || pathname.startsWith(`${item.href}/`);
+            const isActive =
+              item.enabled &&
+              (item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(`${item.href}/`));
             const Icon = item.icon;
+
+            if (!item.enabled) {
+              return (
+                <div
+                  key={item.href}
+                  className="flex cursor-not-allowed items-center justify-between gap-3 rounded-md px-3 py-2 text-sm font-medium text-white/30"
+                  title="Coming later"
+                >
+                  <span className="flex items-center gap-3">
+                    <Icon className="h-4.5 w-4.5" />
+                    {item.label}
+                  </span>
+                  <span className="font-mono text-[10px] tracking-wide text-white/25">soon</span>
+                </div>
+              );
+            }
 
             return (
               <Link
@@ -56,18 +83,25 @@ export function Sidebar({ mobileOpen, onClose }: SidebarProps) {
                 href={item.href}
                 onClick={onClose}
                 className={cn(
-                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                  isActive
-                    ? "bg-indigo-50 text-indigo-700"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+                  "relative flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                  isActive ? "bg-emerald-400/10 text-emerald-300" : "text-white/60 hover:bg-white/5 hover:text-white/90",
                 )}
               >
-                <Icon className="h-5 w-5" />
+                {isActive && (
+                  <span className="absolute inset-y-1 left-0 w-0.5 rounded-full bg-emerald-400" aria-hidden="true" />
+                )}
+                <Icon className="h-4.5 w-4.5" />
                 {item.label}
               </Link>
             );
           })}
         </nav>
+
+        <div className="border-t border-white/10 px-6 py-4 font-mono text-[11px] leading-relaxed text-white/30">
+          <p>{"// generate"}</p>
+          <p>{"// personalize"}</p>
+          <p>{"// deliver"}</p>
+        </div>
       </aside>
     </>
   );

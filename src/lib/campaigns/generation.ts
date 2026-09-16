@@ -418,7 +418,7 @@ async function recoverStaleGeneratingRows(campaignId: string): Promise<number> {
  * simplification as Phase 5's row-claiming: not `FOR UPDATE SKIP LOCKED`,
  * but correct against double-claiming.
  */
-async function claimJob(jobId: string): Promise<JobRow | null> {
+export async function claimJob(jobId: string): Promise<JobRow | null> {
   const supabase = createServiceRoleClient();
 
   const { data: existing, error: readError } = await supabase
@@ -451,7 +451,7 @@ export interface JobInfo {
   lastError: string | null;
 }
 
-function toJobInfo(job: JobRow): JobInfo {
+export function toJobInfo(job: JobRow): JobInfo {
   return { id: job.id, status: job.status, attempts: job.attempts, lastError: job.last_error };
 }
 

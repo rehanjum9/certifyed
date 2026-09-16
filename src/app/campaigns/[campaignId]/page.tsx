@@ -4,9 +4,12 @@ import { getCampaign, listCampaignRows } from "@/lib/campaigns";
 import { getTemplate } from "@/lib/templates";
 import { computeCampaignProgress } from "@/lib/campaigns/generation";
 import { getLatestGenerationJob } from "@/lib/campaigns/jobs";
+import { computeEmailProgress } from "@/lib/campaigns/emailDelivery";
+import { getLatestEmailJob } from "@/lib/campaigns/emailJobs";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Badge } from "@/components/ui/Badge";
 import { GenerationPanel } from "@/components/campaigns/GenerationPanel";
+import { EmailDeliveryPanel } from "@/components/campaigns/EmailDeliveryPanel";
 import { formatDate } from "@/lib/format";
 import type { BadgeVariant } from "@/components/ui/Badge";
 
@@ -30,11 +33,13 @@ export default async function CampaignDetailPage({
     notFound();
   }
 
-  const [template, rows, progress, job] = await Promise.all([
+  const [template, rows, progress, job, emailProgress, emailJob] = await Promise.all([
     getTemplate(campaign.template_id),
     listCampaignRows(campaignId),
     computeCampaignProgress(campaignId),
     getLatestGenerationJob(campaignId),
+    computeEmailProgress(campaignId),
+    getLatestEmailJob(campaignId),
   ]);
 
   return (
@@ -61,6 +66,19 @@ export default async function CampaignDetailPage({
               job ? { id: job.id, status: job.status, attempts: job.attempts, lastError: job.last_error } : null
             }
             initialProgress={progress}
+          />
+        </div>
+
+        <div className="rounded-xl border border-slate-200 bg-white p-5">
+          <h2 className="mb-3 text-sm font-semibold text-slate-900">Email delivery</h2>
+          <EmailDeliveryPanel
+            campaignId={campaign.id}
+            initialJob={
+              emailJob
+                ? { id: emailJob.id, status: emailJob.status, attempts: emailJob.attempts, lastError: emailJob.last_error }
+                : null
+            }
+            initialProgress={emailProgress}
           />
         </div>
 

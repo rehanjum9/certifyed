@@ -1,37 +1,87 @@
--- P0 hardening: server-side rate limiting, backed by Postgres so it works
--- correctly across multiple serverless instances (no in-memory-only
--- counters, no new paid infrastructure).
+-- P0 SECURITY HARDENING
+-- Persistent fixed-window rate limiting for serverless deployments.
 --
--- Fixed-window counting: callers compute a bucket_key that already encodes
--- the route, the caller, and the current time window (see lib/rateLimit.ts),
--- then call increment_rate_limit exactly once per request. The INSERT ...
--- ON CONFLICT ... DO UPDATE ... RETURNING is a single atomic statement, so
--- concurrent requests in the same window can never under-count each other.
+-- The application computes a bucket_key containing:
+-- - route/action
+-- - caller identity
+-- - current time window
+--
+-- increment_rate_limit() atomically increments the counter so concurrent
+-- requests cannot under-count each other.
+--
+-- This table and RPC are server-only. Browser-facing anon/authenticated
+-- roles are explicitly denied access. The service-role key is used only
+-- from server-side code.
 
-create table if not exists rate_limits (
+create table if not exists public.rate_limits (
   bucket_key text primary key,
   count integer not null default 1,
   window_start timestamptz not null,
   updated_at timestamptz not null default now()
 );
 
-create index if not exists rate_limits_window_start_idx on rate_limits(window_start);
+create index if not exists rate_limits_window_start_idx
+  on public.rate_limits (window_start);
 
-alter table rate_limits enable row level security;
--- No policies: this table is only ever touched via the service-role key
--- (server-side rate-limit checks), matching every other table in this
--- schema's security model.
+-- Default-deny for normal Supabase clients.
+alter table public.rate_limits enable row level security;
 
-create or replace function increment_rate_limit(p_bucket_key text, p_window_start timestamptz)
-returns integer as $$
+-- Explicit table permissions.
+revoke all on table public.rate_limits from public;
+revoke all on table public.rate_limits from anon;
+revoke all on table public.rate_limits from authenticated;
+
+grant select, insert, update, delete
+  on table public.rate_limits
+  to service_role;
+
+-- Atomically increment one rate-limit bucket.
+create or replace function public.increment_rate_limit(
+  p_bucket_key text,
+  p_window_start timestamptz
+)
+returns integer
+language plpgsql
+security invoker
+as $$
 declare
   new_count integer;
 begin
-  insert into rate_limits (bucket_key, count, window_start)
-  values (p_bucket_key, 1, p_window_start)
+  insert into public.rate_limits as rl (
+    bucket_key,
+    count,
+    window_start
+  )
+  values (
+    p_bucket_key,
+    1,
+    p_window_start
+  )
   on conflict (bucket_key)
-  do update set count = rate_limits.count + 1, updated_at = now()
+  do update
+    set
+      count = rl.count + 1,
+      updated_at = now()
   returning count into new_count;
+
   return new_count;
 end;
-$$ language plpgsql;
+$$;
+
+-- PostgreSQL functions may otherwise be executable by PUBLIC.
+-- Keep this RPC server-only.
+revoke all
+  on function public.increment_rate_limit(text, timestamptz)
+  from public;
+
+revoke all
+  on function public.increment_rate_limit(text, timestamptz)
+  from anon;
+
+revoke all
+  on function public.increment_rate_limit(text, timestamptz)
+  from authenticated;
+
+grant execute
+  on function public.increment_rate_limit(text, timestamptz)
+  to service_role;

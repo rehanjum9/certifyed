@@ -1,28 +1,22 @@
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 
+/**
+ * Intentionally public (uptime monitors typically can't authenticate) and
+ * intentionally minimal: no env var names, no row counts, no raw
+ * error/provider details -- just whether the app can reach its database.
+ * See the P0 security report (HEALTH-LEAK-01) for why the previous version
+ * of this route was tightened.
+ */
 export async function GET() {
-  const missing = [
-    "NEXT_PUBLIC_SUPABASE_URL",
-    "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
-    "SUPABASE_SECRET_KEY",
-  ].filter((key) => !process.env[key]);
-
-  if (missing.length > 0) {
-    return NextResponse.json(
-      { ok: false, error: `Missing env vars: ${missing.join(", ")}` },
-      { status: 500 },
-    );
+  try {
+    const supabase = createServiceRoleClient();
+    const { error } = await supabase.from("templates").select("id", { head: true, count: "exact" }).limit(1);
+    if (error) {
+      return NextResponse.json({ ok: false }, { status: 503 });
+    }
+    return NextResponse.json({ ok: true });
+  } catch {
+    return NextResponse.json({ ok: false }, { status: 503 });
   }
-
-  const supabase = createServiceRoleClient();
-  const { error, count } = await supabase
-    .from("templates")
-    .select("*", { count: "exact", head: true });
-
-  if (error) {
-    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ ok: true, templateCount: count ?? 0 });
 }

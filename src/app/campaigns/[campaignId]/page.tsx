@@ -13,6 +13,7 @@ import { DataTable, DataTableHead, DataTableTh, DataTableBody, DataTableRow, Dat
 import { GenerationPanel } from "@/components/campaigns/GenerationPanel";
 import { EmailDeliveryPanel } from "@/components/campaigns/EmailDeliveryPanel";
 import { formatDate } from "@/lib/format";
+import { maskEmail } from "@/lib/email/mask";
 import type { BadgeVariant } from "@/components/ui/Badge";
 
 // Always reflects the current DB/storage state; never statically cached.
@@ -50,6 +51,11 @@ export default async function CampaignDetailPage({
     computeEmailProgress(campaignId),
     getLatestEmailJob(campaignId),
   ]);
+
+  // Masked server-side, and only ever rendered into this page's HTML -- never
+  // returned from a public API response. See the P0 security report.
+  const rawTestEmail = process.env.RESEND_TEST_EMAIL;
+  const maskedTestEmail = rawTestEmail ? maskEmail(rawTestEmail) : null;
 
   return (
     <PageContainer>
@@ -101,6 +107,7 @@ export default async function CampaignDetailPage({
                     : null
                 }
                 initialProgress={emailProgress}
+                maskedTestEmail={maskedTestEmail}
               />
             </div>
           </Card>

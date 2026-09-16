@@ -8,6 +8,8 @@ import { validateRows, type FieldMapping } from "@/lib/spreadsheet/validateRows"
 import { buildCampaignRowInserts, buildColumnMapping, resolveEmailColumnHeader } from "@/lib/campaigns/persistence";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { STORAGE_BUCKETS } from "@/lib/supabase/storage";
+import { guardApiRoute } from "@/lib/auth/apiGuard";
+import { RATE_LIMITS } from "@/lib/rateLimit";
 
 const MAX_NAME_LENGTH = 200;
 
@@ -31,6 +33,9 @@ const metaSchema = z.object({
  * to the database until it's been checked against that real data.
  */
 export async function POST(request: Request) {
+  const guard = await guardApiRoute({ rateLimit: { key: "campaign-create", ...RATE_LIMITS.campaignCreate } });
+  if ("response" in guard) return guard.response;
+
   let formData: FormData;
   try {
     formData = await request.formData();

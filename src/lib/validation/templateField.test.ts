@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { templateFieldInputSchema, formatValidationIssue } from "./templateField";
+import { templateFieldInputSchema, formatValidationIssue, saveFieldsBodySchema, MAX_TEMPLATE_FIELDS } from "./templateField";
 
 function validField(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -143,6 +143,27 @@ describe("templateFieldInputSchema: backward compatibility (undefined vs. null)"
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(formatValidationIssue(result.error)).toContain("Max width is required for Auto Width mode");
+    }
+  });
+});
+
+describe("saveFieldsBodySchema (MAX_TEMPLATE_FIELDS)", () => {
+  it("accepts a fields array at exactly the maximum", () => {
+    const fields = Array.from({ length: MAX_TEMPLATE_FIELDS }, (_, i) =>
+      validField({ id: `123e4567-e89b-12d3-a456-4266141740${String(i).padStart(2, "0")}`, field_key: `field_${i}` }),
+    );
+    const result = saveFieldsBodySchema.safeParse({ fields });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects a fields array exceeding the maximum, with a clear error", () => {
+    const fields = Array.from({ length: MAX_TEMPLATE_FIELDS + 1 }, (_, i) =>
+      validField({ id: `123e4567-e89b-12d3-a456-4266141740${String(i).padStart(2, "0")}`, field_key: `field_${i}` }),
+    );
+    const result = saveFieldsBodySchema.safeParse({ fields });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(formatValidationIssue(result.error)).toContain(`at most ${MAX_TEMPLATE_FIELDS} fields`);
     }
   });
 });

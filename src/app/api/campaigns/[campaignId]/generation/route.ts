@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getCampaign } from "@/lib/campaigns";
 import { getActiveGenerationJob, getLatestGenerationJob, startGenerationJob } from "@/lib/campaigns/jobs";
 import { computeCampaignProgress } from "@/lib/campaigns/generation";
+import { guardApiRoute } from "@/lib/auth/apiGuard";
+import { RATE_LIMITS } from "@/lib/rateLimit";
 
 function toJobInfo(job: { id: string; status: string; attempts: number; last_error: string | null } | null) {
   if (!job) return null;
@@ -16,6 +18,9 @@ function toJobInfo(job: { id: string; status: string; attempts: number; last_err
  * mid-batch elsewhere.
  */
 export async function GET(_request: Request, { params }: RouteContext<"/api/campaigns/[campaignId]/generation">) {
+  const guard = await guardApiRoute();
+  if ("response" in guard) return guard.response;
+
   const { campaignId } = await params;
   const campaign = await getCampaign(campaignId);
   if (!campaign) {
@@ -38,6 +43,9 @@ export async function GET(_request: Request, { params }: RouteContext<"/api/camp
  * with POST /api/jobs/[jobId]/process to actually run batches.
  */
 export async function POST(_request: Request, { params }: RouteContext<"/api/campaigns/[campaignId]/generation">) {
+  const guard = await guardApiRoute({ rateLimit: { key: "generation-start", ...RATE_LIMITS.generationStart } });
+  if ("response" in guard) return guard.response;
+
   const { campaignId } = await params;
   const campaign = await getCampaign(campaignId);
   if (!campaign) {

@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { retryFailedEmails } from "@/lib/campaigns/emailDelivery";
+import { guardApiRoute } from "@/lib/auth/apiGuard";
+import { RATE_LIMITS } from "@/lib/rateLimit";
 
 /**
  * Re-queues rows whose *email* delivery failed (see lib/campaigns/
@@ -11,6 +13,9 @@ export async function POST(
   _request: Request,
   { params }: RouteContext<"/api/campaigns/[campaignId]/retry-failed-emails">,
 ) {
+  const guard = await guardApiRoute({ rateLimit: { key: "retry-email", ...RATE_LIMITS.retryEmail } });
+  if ("response" in guard) return guard.response;
+
   const { campaignId } = await params;
 
   try {

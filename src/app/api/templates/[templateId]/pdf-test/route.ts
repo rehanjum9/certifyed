@@ -3,6 +3,7 @@ import { getTemplate, downloadTemplateSvg } from "@/lib/templates";
 import { getPdfRenderer } from "@/lib/pdf";
 import { buildTestOverlays } from "@/lib/pdf/testOverlay";
 import { resolvePdfPageSize } from "@/lib/pdf/pageSize";
+import { guardApiRoute } from "@/lib/auth/apiGuard";
 
 /**
  * Experimental Phase 2.5 fidelity spike. Renders the template's already
@@ -15,6 +16,9 @@ export async function GET(
   _request: Request,
   { params }: RouteContext<"/api/templates/[templateId]/pdf-test">,
 ) {
+  const guard = await guardApiRoute();
+  if ("response" in guard) return guard.response;
+
   const { templateId } = await params;
   const template = await getTemplate(templateId);
 

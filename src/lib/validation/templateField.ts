@@ -3,6 +3,8 @@ import { z } from "zod";
 export const FIELD_KEY_PATTERN = /^[a-z][a-z0-9_]*$/;
 export const MAX_FIELD_KEY_LENGTH = 63;
 export const MIN_FIELD_SIZE = 10;
+/** Caps per-row rendering cost at generation time -- a template can't be made arbitrarily expensive to generate by piling on fields. */
+export const MAX_TEMPLATE_FIELDS = 50;
 
 // Email is handled entirely outside template_fields (campaigns.email_column
 // / campaign_rows.recipient_email) -- it must never be a renderable field.
@@ -89,6 +91,13 @@ export const templateFieldInputSchema = z
   );
 
 export type TemplateFieldInput = z.infer<typeof templateFieldInputSchema>;
+
+/** Body schema for PUT /api/templates/[templateId]/fields -- capped so a template can't be made arbitrarily expensive to generate by piling on fields (see MAX_TEMPLATE_FIELDS). */
+export const saveFieldsBodySchema = z.object({
+  fields: z
+    .array(templateFieldInputSchema)
+    .max(MAX_TEMPLATE_FIELDS, `A template may have at most ${MAX_TEMPLATE_FIELDS} fields.`),
+});
 
 /**
  * Turns the first Zod issue into a message that names the actual

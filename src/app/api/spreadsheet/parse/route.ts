@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { parseSpreadsheet } from "@/lib/spreadsheet/parse";
 import { MAX_SPREADSHEET_UPLOAD_BYTES } from "@/lib/spreadsheet/constants";
+import { guardApiRoute } from "@/lib/auth/apiGuard";
 
 /**
  * Stateless parse-and-return: drives the upload/mapping/validate/preview
@@ -9,6 +10,9 @@ import { MAX_SPREADSHEET_UPLOAD_BYTES } from "@/lib/spreadsheet/constants";
  * re-parses the file itself rather than trusting this response.
  */
 export async function POST(request: Request) {
+  const guard = await guardApiRoute();
+  if ("response" in guard) return guard.response;
+
   let formData: FormData;
   try {
     formData = await request.formData();

@@ -1,17 +1,16 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { getTemplate } from "@/lib/templates";
 import { saveTemplateFields } from "@/lib/templateFields";
-import { templateFieldInputSchema, formatValidationIssue } from "@/lib/validation/templateField";
-
-const saveFieldsBodySchema = z.object({
-  fields: z.array(templateFieldInputSchema),
-});
+import { saveFieldsBodySchema, formatValidationIssue } from "@/lib/validation/templateField";
+import { guardApiRoute } from "@/lib/auth/apiGuard";
 
 export async function PUT(
   request: Request,
   { params }: RouteContext<"/api/templates/[templateId]/fields">,
 ) {
+  const guard = await guardApiRoute();
+  if ("response" in guard) return guard.response;
+
   const { templateId } = await params;
   const template = await getTemplate(templateId);
 

@@ -8,7 +8,12 @@ import { EditorCanvas } from "./EditorCanvas";
 import { ZoomControls } from "./ZoomControls";
 import { computeFitToScreenScale } from "@/lib/editor/coordinates";
 import { computeFittedFontSize } from "@/lib/editor/autoFit";
-import { createDefaultField, defaultPreviewValueFor, type EditorField } from "@/lib/editor/types";
+import {
+  createDefaultField,
+  defaultPreviewValueFor,
+  templateFieldRowToEditorField,
+  type EditorField,
+} from "@/lib/editor/types";
 import { templateFieldInputSchema, type TemplateFieldInput } from "@/lib/validation/templateField";
 import type { TemplateFieldRow } from "@/lib/templateFields";
 
@@ -22,33 +27,14 @@ interface FieldEditorProps {
   initialFields: TemplateFieldRow[];
 }
 
-function rowToEditorField(row: TemplateFieldRow): EditorField {
-  return {
-    id: row.id,
-    field_key: row.field_key,
-    label: row.label,
-    x: row.x,
-    y: row.y,
-    width: row.width,
-    height: row.height,
-    font_family: row.font_family,
-    font_size: row.font_size,
-    font_weight: row.font_weight === "bold" ? "bold" : "normal",
-    font_color: row.font_color,
-    text_align: row.text_align,
-    auto_fit_text: row.auto_fit_text,
-    min_font_size: row.min_font_size,
-    max_font_size: row.max_font_size,
-    is_required: row.is_required,
-  };
-}
-
 function editorFieldToInput(field: EditorField): TemplateFieldInput {
   return { ...field };
 }
 
 export function FieldEditor({ template, svg, initialFields }: FieldEditorProps) {
-  const [fields, setFields] = useState<EditorField[]>(() => initialFields.map(rowToEditorField));
+  const [fields, setFields] = useState<EditorField[]>(() =>
+    initialFields.map(templateFieldRowToEditorField),
+  );
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
   const [previewValues, setPreviewValues] = useState<Record<string, string>>(() =>
     Object.fromEntries(

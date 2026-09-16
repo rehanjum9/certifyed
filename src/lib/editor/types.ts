@@ -1,4 +1,5 @@
 import { DEFAULT_FONT_NAME } from "@/lib/fonts";
+import type { TemplateFieldRow } from "@/lib/templateFields";
 
 export type TextAlign = "left" | "center" | "right";
 export type FontWeight = "normal" | "bold";
@@ -26,6 +27,27 @@ export interface EditorField {
   min_font_size: number | null;
   max_font_size: number | null;
   is_required: boolean;
+}
+
+export function templateFieldRowToEditorField(row: TemplateFieldRow): EditorField {
+  return {
+    id: row.id,
+    field_key: row.field_key,
+    label: row.label,
+    x: row.x,
+    y: row.y,
+    width: row.width,
+    height: row.height,
+    font_family: row.font_family,
+    font_size: row.font_size,
+    font_weight: row.font_weight === "bold" ? "bold" : "normal",
+    font_color: row.font_color,
+    text_align: row.text_align,
+    auto_fit_text: row.auto_fit_text,
+    min_font_size: row.min_font_size,
+    max_font_size: row.max_font_size,
+    is_required: row.is_required,
+  };
 }
 
 const DEFAULT_FIELD_WIDTH = 220;

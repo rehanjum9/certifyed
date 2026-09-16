@@ -2,8 +2,7 @@
 
 import { useMemo } from "react";
 import { cn } from "@/lib/cn";
-import { getCssFontFamily } from "@/lib/fonts";
-import { computeFittedFontSize } from "@/lib/editor/autoFit";
+import { computeFieldTextStyle } from "@/lib/editor/fieldTextStyle";
 import {
   screenToSvgLength,
   clampAxisPosition,
@@ -46,9 +45,9 @@ export function FieldOverlay({
   onChange,
   onDelete,
 }: FieldOverlayProps) {
-  const { fontSize: fittedFontSize, overflowing } = useMemo(
-    () => computeFittedFontSize(field, previewText),
-    [field, previewText],
+  const { style: textStyle, overflowing } = useMemo(
+    () => computeFieldTextStyle(field, previewText, scale),
+    [field, previewText, scale],
   );
 
   function handleDragPointerDown(event: React.PointerEvent) {
@@ -124,14 +123,7 @@ export function FieldOverlay({
       )}
     >
       <span
-        style={{
-          width: "100%",
-          textAlign: field.text_align,
-          fontFamily: getCssFontFamily(field.font_family),
-          fontWeight: field.font_weight,
-          fontSize: Math.max(fittedFontSize * scale, 1),
-          color: field.font_color,
-        }}
+        style={textStyle}
         className="pointer-events-none select-none overflow-hidden whitespace-nowrap px-0.5"
       >
         {previewText}

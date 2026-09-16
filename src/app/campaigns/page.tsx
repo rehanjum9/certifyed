@@ -1,28 +1,70 @@
+import { listCampaigns } from "@/lib/campaigns";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { Button } from "@/components/ui/Button";
-import { IconCampaigns } from "@/components/ui/icons";
+import { LinkButton } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { Badge } from "@/components/ui/Badge";
+import { IconCampaigns, IconPlus } from "@/components/ui/icons";
+import { formatDate } from "@/lib/format";
 
-export default function CampaignsPage() {
+// Always reflects the current DB/storage state; never statically cached.
+export const dynamic = "force-dynamic";
+
+function statusVariant(status: string): "neutral" | "success" | "warning" | "info" {
+  if (status === "completed") return "success";
+  if (status === "failed") return "warning";
+  if (status === "draft") return "neutral";
+  return "info";
+}
+
+export default async function CampaignsPage() {
+  const campaigns = await listCampaigns();
+
   return (
     <PageContainer>
       <div className="flex flex-col gap-6">
         <PageHeader
           title="Campaigns"
           description="Upload a roster and run a bulk certificate generation."
-        />
-
-        <EmptyState
-          icon={<IconCampaigns className="h-6 w-6" />}
-          title="No campaigns yet"
-          description="Excel/CSV upload, column mapping, and bulk generation land in a later phase."
-          action={
-            <Button variant="secondary" disabled title="Coming in a later phase">
+          actions={
+            <LinkButton href="/campaigns/new">
+              <IconPlus className="h-4 w-4" />
               New campaign
-            </Button>
+            </LinkButton>
           }
         />
+
+        {campaigns.length === 0 ? (
+          <EmptyState
+            icon={<IconCampaigns className="h-6 w-6" />}
+            title="No campaigns yet"
+            description="Upload a roster and map it to a certificate template to create your first campaign."
+            action={
+              <LinkButton href="/campaigns/new">
+                <IconPlus className="h-4 w-4" />
+                New campaign
+              </LinkButton>
+            }
+          />
+        ) : (
+          <div className="flex flex-col gap-3">
+            {campaigns.map((campaign) => (
+              <Card key={campaign.id} className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-semibold text-slate-900">{campaign.name}</h3>
+                    <Badge variant={statusVariant(campaign.status)}>{campaign.status}</Badge>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    Template: {campaign.templateName ?? "(deleted)"} - {campaign.rowCount} row
+                    {campaign.rowCount === 1 ? "" : "s"} - created {formatDate(campaign.created_at)}
+                  </p>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
     </PageContainer>
   );

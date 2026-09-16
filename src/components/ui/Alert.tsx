@@ -1,0 +1,24 @@
+import type { ReactNode } from "react";
+import { cn } from "@/lib/cn";
+
+export type AlertVariant = "error" | "success" | "info";
+
+const variantClasses: Record<AlertVariant, string> = {
+  error: "border-red-200 bg-red-50 text-red-700",
+  success: "border-emerald-200 bg-emerald-50 text-emerald-800",
+  info: "border-indigo-200 bg-indigo-50 text-indigo-700",
+};
+
+interface AlertProps {
+  variant?: AlertVariant;
+  className?: string;
+  children: ReactNode;
+}
+
+export function Alert({ variant = "info", className, children }: AlertProps) {
+  return (
+    <div className={cn("rounded-lg border px-4 py-3 text-sm", variantClasses[variant], className)}>
+      {children}
+    </div>
+  );
+}

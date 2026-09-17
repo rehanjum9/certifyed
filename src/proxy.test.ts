@@ -52,7 +52,45 @@ describe("proxy (auth gate)", () => {
     const response = await proxy(new NextRequest("http://localhost:3000/login"));
 
     expect(response.status).toBe(307);
-    expect(response.headers.get("location")).toBe("http://localhost:3000/");
+    expect(response.headers.get("location")).toBe("http://localhost:3000/dashboard");
+  });
+
+  it.each(["/", "/about", "/how-to-use"])("lets an unauthenticated visitor reach the public page %s without redirecting", async (path) => {
+    vi.mocked(createServerClient).mockReturnValue(mockSupabaseClient(null) as never);
+
+    const response = await proxy(new NextRequest(`http://localhost:3000${path}`));
+
+    expect(response.headers.get("location")).toBeNull();
+  });
+
+  it.each(["/", "/about", "/how-to-use"])(
+    "lets an authenticated visitor reach the public page %s without redirecting -- they may still browse it while signed in",
+    async (path) => {
+      vi.mocked(createServerClient).mockReturnValue(mockSupabaseClient({ id: "operator-1" }) as never);
+
+      const response = await proxy(new NextRequest(`http://localhost:3000${path}`));
+
+      expect(response.headers.get("location")).toBeNull();
+    },
+  );
+
+  it("redirects an unauthenticated visitor away from /dashboard, preserving the intended destination", async () => {
+    vi.mocked(createServerClient).mockReturnValue(mockSupabaseClient(null) as never);
+
+    const response = await proxy(new NextRequest("http://localhost:3000/dashboard"));
+
+    expect(response.status).toBe(307);
+    const location = response.headers.get("location");
+    expect(location).toContain("/login");
+    expect(location).toContain("redirectTo=%2Fdashboard");
+  });
+
+  it("lets an authenticated visitor reach /dashboard without redirecting", async () => {
+    vi.mocked(createServerClient).mockReturnValue(mockSupabaseClient({ id: "operator-1" }) as never);
+
+    const response = await proxy(new NextRequest("http://localhost:3000/dashboard"));
+
+    expect(response.headers.get("location")).toBeNull();
   });
 
   it("lets an authenticated visitor reach a protected page without redirecting", async () => {

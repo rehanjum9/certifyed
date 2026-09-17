@@ -4,22 +4,37 @@ import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
+import { PublicHeader } from "./PublicHeader";
+import { PublicFooter } from "./PublicFooter";
 
-/** Pages that render outside the authenticated app shell (no sidebar/header chrome). */
+/** The public marketing site -- open to everyone, gets the public header/footer, never the app sidebar. */
+const PUBLIC_SITE_PATHS = new Set(["/", "/about", "/how-to-use"]);
+/** Renders with no chrome at all (its own centered card) -- not the app shell, not the public header/footer. */
 const CHROMELESS_PATHS = new Set(["/login"]);
 
 interface AppShellProps {
   children: ReactNode;
-  /** The signed-in operator's email from the real Supabase Auth session; null on chromeless pages. */
+  /** The signed-in operator's email from the real Supabase Auth session; null when signed out. */
   userEmail: string | null;
 }
 
 export function AppShell({ children, userEmail }: AppShellProps) {
   const pathname = usePathname();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const isAuthenticated = userEmail !== null;
 
   if (CHROMELESS_PATHS.has(pathname)) {
     return <div className="min-h-screen bg-slate-50">{children}</div>;
+  }
+
+  if (PUBLIC_SITE_PATHS.has(pathname)) {
+    return (
+      <div className="flex min-h-screen flex-col bg-white">
+        <PublicHeader isAuthenticated={isAuthenticated} />
+        <main className="flex flex-1 flex-col">{children}</main>
+        <PublicFooter isAuthenticated={isAuthenticated} />
+      </div>
+    );
   }
 
   return (

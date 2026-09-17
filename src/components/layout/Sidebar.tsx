@@ -6,7 +6,7 @@ import { cn } from "@/lib/cn";
 import { IconDashboard, IconTemplates, IconCampaigns, IconSettings } from "@/components/ui/icons";
 
 const NAV_ITEMS = [
-  { href: "/", label: "Dashboard", icon: IconDashboard, exact: true },
+  { href: "/dashboard", label: "Dashboard", icon: IconDashboard, exact: true },
   { href: "/templates", label: "Templates", icon: IconTemplates, exact: false },
   { href: "/campaigns", label: "Campaigns", icon: IconCampaigns, exact: false },
   { href: "/settings", label: "Settings", icon: IconSettings, exact: false },
@@ -37,7 +37,7 @@ export function Sidebar({ mobileOpen, onClose }: SidebarProps) {
         )}
       >
         <Link
-          href="/"
+          href="/dashboard"
           onClick={onClose}
           className="flex h-16 shrink-0 flex-col justify-center border-b border-white/10 px-6 transition-colors hover:bg-white/5"
         >

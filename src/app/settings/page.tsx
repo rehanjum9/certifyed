@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { getSignedInUserEmail } from "@/lib/auth/session";
 import { resolveEmailProvider, getEmailProviderConfigError, type EmailProviderName } from "@/lib/email/provider";
 import { maskEmail } from "@/lib/email/mask";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -32,9 +32,7 @@ function CheckRow({ label }: { label: string }) {
 }
 
 export default async function SettingsPage() {
-  const supabase = await createServerSupabaseClient();
-  const { data } = await supabase.auth.getUser();
-  const email = data.user?.email ?? null;
+  const email = await getSignedInUserEmail();
 
   let provider: EmailProviderName | null = null;
   let providerConfigError: string | null = null;

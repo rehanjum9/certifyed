@@ -1,13 +1,22 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
-const PUBLIC_PATHS = new Set(["/login"]);
+// Freely viewable by anyone, signed in or not -- never redirected away
+// either direction. Real campaign/template/recipient data must never be
+// fetched from these routes (see src/app/page.tsx, src/app/about/page.tsx,
+// src/app/how-to-use/page.tsx -- all static/demo content only).
+const PUBLIC_SITE_PATHS = new Set(["/", "/about", "/how-to-use"]);
+// Viewable only while signed out; an authenticated visitor is sent to the
+// real app instead of the sign-in form.
+const LOGIN_PATH = "/login";
 
 /**
  * Single gate for every page in the app: refreshes the Supabase session
  * cookie on every request (required for @supabase/ssr's server client to
- * stay valid across requests) and redirects unauthenticated visitors away
- * from any page except /login.
+ * stay valid across requests), keeps the public marketing pages open to
+ * everyone, and redirects unauthenticated visitors away from the
+ * authenticated app (/dashboard, /templates, /campaigns, /settings, ...)
+ * to /login.
  *
  * API routes are intentionally NOT redirected here -- they enforce their
  * own 401 via guardApiRoute (src/lib/auth/apiGuard.ts), which returns JSON
@@ -44,16 +53,20 @@ export async function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
   const isApiRoute = pathname.startsWith("/api/");
-  const isPublicPage = PUBLIC_PATHS.has(pathname);
+  const isPublicSitePage = PUBLIC_SITE_PATHS.has(pathname);
+  const isLoginPage = pathname === LOGIN_PATH;
 
-  if (!user && !isApiRoute && !isPublicPage) {
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("redirectTo", pathname);
-    return NextResponse.redirect(loginUrl);
+  // An authenticated visitor doesn't need the sign-in form -- send them
+  // straight to the real app. They may still freely browse the public
+  // marketing pages (home/about/how-to-use) while signed in.
+  if (user && isLoginPage) {
+    return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
-  if (user && isPublicPage) {
-    return NextResponse.redirect(new URL("/", request.url));
+  if (!user && !isApiRoute && !isPublicSitePage && !isLoginPage) {
+    const loginUrl = new URL(LOGIN_PATH, request.url);
+    loginUrl.searchParams.set("redirectTo", pathname);
+    return NextResponse.redirect(loginUrl);
   }
 
   return response;

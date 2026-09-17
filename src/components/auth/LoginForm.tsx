@@ -32,7 +32,7 @@ export function LoginForm() {
         return;
       }
 
-      const redirectTo = searchParams.get("redirectTo") || "/";
+      const redirectTo = searchParams.get("redirectTo") || "/dashboard";
       router.push(redirectTo);
       router.refresh();
     } catch {
@@ -70,7 +70,7 @@ export function LoginForm() {
           {error && <Alert variant="error">{error}</Alert>}
           <Button type="submit" disabled={status === "loading"}>
             {status === "loading" && <Spinner className="h-4 w-4" />}
-            Log in
+            Sign in
           </Button>
         </form>
       </CardContent>

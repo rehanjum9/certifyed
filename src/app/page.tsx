@@ -1,192 +1,174 @@
 import Link from "next/link";
-import { listTemplates } from "@/lib/templates";
-import { listCampaignsWithOverview } from "@/lib/campaigns/overview";
-import { getDashboardStats } from "@/lib/dashboard";
-import { PageContainer } from "@/components/layout/PageContainer";
-import { StatCard } from "@/components/ui/StatCard";
-import { EmptyState } from "@/components/ui/EmptyState";
-import { LinkButton } from "@/components/ui/Button";
+import { getSignedInUserEmail } from "@/lib/auth/session";
+import { getPrimaryCta } from "@/lib/publicCta";
+import { buttonClassName } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
-import { QuickAction } from "@/components/ui/QuickAction";
-import { DataTable, DataTableHead, DataTableTh, DataTableBody, DataTableRow, DataTableTd } from "@/components/ui/DataTable";
-import {
-  IconTemplates,
-  IconCampaigns,
-  IconMail,
-  IconArrowRight,
-  IconPlus,
-  IconSettings,
-  IconFileText,
-} from "@/components/ui/icons";
-import { formatDate } from "@/lib/format";
+import { IconArrowRight } from "@/components/ui/icons";
 
-const RECENT_CAMPAIGN_COUNT = 5;
-
-// Always reflects the current DB/storage state; never statically cached.
+// Auth-aware CTA only -- everything else on this page is static copy/demo
+// content. Never queries campaigns/templates/jobs or any private data.
 export const dynamic = "force-dynamic";
 
-function campaignStatusVariant(status: string): "neutral" | "success" | "warning" | "info" {
-  if (status === "completed") return "success";
-  if (status === "failed") return "warning";
-  if (status === "draft") return "neutral";
-  return "info";
-}
+const HOW_IT_WORKS_STEPS = [
+  {
+    number: "01",
+    heading: "Upload your design",
+    copy: "Upload an SVG certificate template and position the fields that should change for each recipient.",
+  },
+  {
+    number: "02",
+    heading: "Import recipient data",
+    copy: "Upload a CSV or Excel file, map its columns to your certificate fields, and validate the recipient list.",
+  },
+  {
+    number: "03",
+    heading: "Generate and deliver",
+    copy: "Generate personalized PDF certificates in batches and send them directly to each recipient.",
+  },
+];
 
-export default async function DashboardPage() {
-  const [stats, recentCampaigns, templates] = await Promise.all([
-    getDashboardStats(),
-    listCampaignsWithOverview(RECENT_CAMPAIGN_COUNT),
-    listTemplates(),
-  ]);
+const BENEFITS = [
+  {
+    heading: "Keep your design",
+    copy: "Use your own certificate artwork instead of rebuilding it inside the application.",
+  },
+  {
+    heading: "Bulk personalization",
+    copy: "Turn spreadsheet rows into personalized certificates without editing each file manually.",
+  },
+  {
+    heading: "One delivery flow",
+    copy: "Generate, review, download, and email certificates from the same campaign.",
+  },
+];
+
+export default async function HomePage() {
+  const userEmail = await getSignedInUserEmail();
+  const primaryCta = getPrimaryCta(userEmail !== null);
 
   return (
-    <PageContainer>
-      <div className="flex flex-col gap-8">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="font-mono text-2xl font-semibold tracking-tight text-slate-900">
-              <span className="text-emerald-600">&gt;</span> dashboard_
-            </h1>
-            <p className="mt-1 text-sm text-slate-500">
-              Manage certificate generation, delivery and campaign activity.
-            </p>
-          </div>
-          <div className="flex shrink-0 items-center gap-3">
-            <LinkButton href="/templates/new" variant="secondary">
-              <IconPlus className="h-4 w-4" />
-              Upload template
-            </LinkButton>
-            <LinkButton href="/campaigns/new">
-              <IconPlus className="h-4 w-4" />
-              New campaign
-            </LinkButton>
-          </div>
+    <>
+      <section className="mx-auto flex w-full max-w-4xl flex-col items-center gap-6 px-4 pb-16 pt-20 text-center sm:px-6 lg:px-8">
+        <div>
+          <p className="font-mono text-sm font-semibold tracking-tight text-slate-900">
+            <span className="text-emerald-600">&gt;</span> CERTIFYED_
+          </p>
+          <p className="mt-1 font-mono text-xs text-slate-500">generate. personalize. deliver.</p>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard label="Total templates" value={stats.totalTemplates} icon={<IconTemplates className="h-5 w-5" />} />
-          <StatCard label="Total campaigns" value={stats.totalCampaigns} icon={<IconCampaigns className="h-5 w-5" />} />
-          <StatCard
-            label="Certificates generated"
-            value={stats.certificatesGenerated}
-            icon={<IconFileText className="h-5 w-5" />}
-          />
-          <StatCard label="Emails sent" value={stats.emailsSent} icon={<IconMail className="h-5 w-5" />} />
+        <h1 className="max-w-2xl text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
+          Bulk certificates, without the repetitive work.
+        </h1>
+
+        <p className="max-w-xl text-base text-slate-600">
+          Upload your certificate design, import recipient data, generate personalized PDFs, and deliver them by email
+          — from one workflow.
+        </p>
+
+        <div className="flex flex-wrap items-center justify-center gap-4">
+          <Link href={primaryCta.href} className={buttonClassName("primary", "md")}>
+            {primaryCta.label}
+          </Link>
+          <a href="#how-it-works" className="text-sm font-medium text-slate-600 hover:text-slate-900">
+            See how it works
+          </a>
         </div>
+      </section>
 
-        <section className="flex flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-mono text-sm font-semibold text-slate-900">recent_campaigns</h2>
-            {recentCampaigns.length > 0 && (
-              <Link
-                href="/campaigns"
-                className="flex items-center gap-1 text-sm font-medium text-emerald-600 hover:text-emerald-700"
-              >
-                View all
-                <IconArrowRight className="h-4 w-4" />
-              </Link>
-            )}
+      <section id="how-it-works" className="border-t border-slate-200 bg-slate-50">
+        <div className="mx-auto w-full max-w-5xl px-4 py-16 sm:px-6 lg:px-8">
+          <h2 className="font-mono text-sm font-semibold text-slate-900">
+            <span className="text-emerald-600">&gt;</span> how_it_works
+          </h2>
+          <p className="mt-2 text-lg text-slate-700">From template to delivery in three steps.</p>
+
+          <div className="mt-10 grid gap-6 sm:grid-cols-3">
+            {HOW_IT_WORKS_STEPS.map((step) => (
+              <div key={step.number} className="rounded-xl border border-slate-200 bg-white p-6">
+                <span className="font-mono text-xs font-semibold text-emerald-600">STEP {step.number}</span>
+                <h3 className="mt-3 text-base font-semibold text-slate-900">{step.heading}</h3>
+                <p className="mt-2 text-sm text-slate-600">{step.copy}</p>
+              </div>
+            ))}
           </div>
 
-          {recentCampaigns.length === 0 ? (
-            <EmptyState
-              icon={<IconCampaigns className="h-6 w-6" />}
-              title="No campaigns yet"
-              description="Upload a roster and map it to a certificate template to create your first campaign."
-              action={
-                <LinkButton href="/campaigns/new">
-                  <IconPlus className="h-4 w-4" />
-                  New campaign
-                </LinkButton>
-              }
-            />
-          ) : (
-            <DataTable>
-              <DataTableHead>
-                <DataTableTh>Name</DataTableTh>
-                <DataTableTh className="hidden lg:table-cell">Template</DataTableTh>
-                <DataTableTh>Recipients</DataTableTh>
-                <DataTableTh>Generated</DataTableTh>
-                <DataTableTh>Emails sent</DataTableTh>
-                <DataTableTh className="hidden lg:table-cell">Progress</DataTableTh>
-                <DataTableTh>Status</DataTableTh>
-                <DataTableTh className="hidden xl:table-cell">Created</DataTableTh>
-              </DataTableHead>
-              <DataTableBody>
-                {recentCampaigns.map((campaign) => (
-                  <DataTableRow key={campaign.id} className="cursor-pointer">
-                    <DataTableTd className="max-w-[220px] font-medium break-words text-slate-900">
-                      <Link href={`/campaigns/${campaign.id}`} className="hover:text-emerald-600">
-                        {campaign.name}
-                      </Link>
-                    </DataTableTd>
-                    <DataTableTd className="hidden max-w-[140px] truncate lg:table-cell">
-                      {campaign.templateName ?? "(deleted)"}
-                    </DataTableTd>
-                    <DataTableTd className="font-mono text-xs">{campaign.rowCount}</DataTableTd>
-                    <DataTableTd className="font-mono text-xs">{campaign.generated}</DataTableTd>
-                    <DataTableTd className="font-mono text-xs">{campaign.emailsSent}</DataTableTd>
-                    <DataTableTd className="hidden min-w-[100px] lg:table-cell">
-                      <ProgressBar percent={campaign.generationProgressPercent} />
-                    </DataTableTd>
-                    <DataTableTd>
-                      <Badge variant={campaignStatusVariant(campaign.status)}>{campaign.status}</Badge>
-                    </DataTableTd>
-                    <DataTableTd className="hidden whitespace-nowrap text-xs text-slate-500 xl:table-cell">
-                      {formatDate(campaign.created_at)}
-                    </DataTableTd>
-                  </DataTableRow>
-                ))}
-              </DataTableBody>
-            </DataTable>
-          )}
-        </section>
+          <p className="mt-8">
+            <Link
+              href="/how-to-use"
+              className="inline-flex items-center gap-1 text-sm font-medium text-emerald-600 hover:text-emerald-700"
+            >
+              View the full guide
+              <IconArrowRight className="h-4 w-4" />
+            </Link>
+          </p>
+        </div>
+      </section>
 
-        <section className="flex flex-col gap-4">
-          <h2 className="font-mono text-sm font-semibold text-slate-900">quick_actions</h2>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            <QuickAction
-              href="/templates/new"
-              icon={<IconTemplates className="h-4.5 w-4.5" />}
-              title="Create Template"
-              description="Upload an SVG certificate design"
-            />
-            <QuickAction
-              href="/campaigns/new"
-              icon={<IconPlus className="h-4.5 w-4.5" />}
-              title="Start Campaign"
-              description="Map a roster onto a template and generate"
-            />
-            <QuickAction
-              href="/campaigns"
-              icon={<IconCampaigns className="h-4.5 w-4.5" />}
-              title="View Campaigns"
-              description="Track generation and delivery progress"
-            />
-            <QuickAction
-              href="/settings"
-              icon={<IconSettings className="h-4.5 w-4.5" />}
-              title="Settings"
-              description="Application preferences"
-            />
+      <section className="border-t border-slate-200">
+        <div className="mx-auto w-full max-w-5xl px-4 py-16 sm:px-6 lg:px-8">
+          <h2 className="font-mono text-sm font-semibold text-slate-900">
+            <span className="text-emerald-600">&gt;</span> built_for_the_workflow
+          </h2>
+          <div className="mt-8 grid gap-6 sm:grid-cols-3">
+            {BENEFITS.map((benefit) => (
+              <div key={benefit.heading}>
+                <p className="font-mono text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {benefit.heading}
+                </p>
+                <p className="mt-2 text-sm text-slate-600">{benefit.copy}</p>
+              </div>
+            ))}
           </div>
-        </section>
+        </div>
+      </section>
 
-        {templates.length === 0 && (
-          <EmptyState
-            icon={<IconTemplates className="h-6 w-6" />}
-            title="No templates yet"
-            description="Upload a Canva-exported SVG certificate to create your first template."
-            action={
-              <LinkButton href="/templates/new">
-                <IconPlus className="h-4 w-4" />
-                Upload your first template
-              </LinkButton>
-            }
-          />
-        )}
-      </div>
-    </PageContainer>
+      {/* Static demo content only -- never real campaign data. See lib/auth/session.ts + no service-role client on this page. */}
+      <section className="border-t border-slate-200 bg-slate-50">
+        <div className="mx-auto w-full max-w-3xl px-4 py-16 sm:px-6 lg:px-8">
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
+              <span className="font-mono text-xs font-medium uppercase tracking-wide text-slate-400">Demo workflow</span>
+              <Badge variant="success">completed</Badge>
+            </div>
+            <div className="grid grid-cols-2 gap-4 p-5 sm:grid-cols-4">
+              <div>
+                <p className="text-xs text-slate-400">Campaign</p>
+                <p className="mt-1 truncate text-sm font-medium text-slate-900">Volunteer Program</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-400">Recipients</p>
+                <p className="mt-1 font-mono text-sm font-medium text-slate-900">120</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-400">Generated</p>
+                <p className="mt-1 font-mono text-sm font-medium text-slate-900">120</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-400">Emails sent</p>
+                <p className="mt-1 font-mono text-sm font-medium text-slate-900">118</p>
+              </div>
+            </div>
+            <div className="px-5 pb-5">
+              <ProgressBar percent={98} tone="sky" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="border-t border-slate-200">
+        <div className="mx-auto flex w-full max-w-3xl flex-col items-center gap-4 px-4 py-16 text-center sm:px-6 lg:px-8">
+          <h2 className="text-2xl font-semibold tracking-tight text-slate-900">
+            Ready to simplify certificate delivery?
+          </h2>
+          <p className="max-w-md text-sm text-slate-600">
+            Set up a template once, then use it across an entire recipient list.
+          </p>
+          <Link href={primaryCta.href} className={buttonClassName("primary", "md")}>
+            {primaryCta.label}
+          </Link>
+        </div>
+      </section>
+    </>
   );
 }

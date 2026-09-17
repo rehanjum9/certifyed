@@ -11,6 +11,7 @@ interface HeaderProps {
 }
 
 const SEGMENT_LABELS: Record<string, string> = {
+  dashboard: "Dashboard",
   templates: "Templates",
   campaigns: "Campaigns",
   settings: "Settings",
@@ -19,7 +20,6 @@ const SEGMENT_LABELS: Record<string, string> = {
 };
 
 function breadcrumbFromPathname(pathname: string): string[] {
-  if (pathname === "/") return ["Dashboard"];
   const segments = pathname.split("/").filter(Boolean);
   return segments.map((segment) => {
     if (SEGMENT_LABELS[segment]) return SEGMENT_LABELS[segment];

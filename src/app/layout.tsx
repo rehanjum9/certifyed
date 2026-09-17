@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AppShell } from "@/components/layout/AppShell";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { getSignedInUserEmail } from "@/lib/auth/session";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -20,14 +20,12 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
-  const supabase = await createServerSupabaseClient();
-  const { data } = await supabase.auth.getUser();
-  const userEmail = data.user?.email ?? null;
+  const userEmail = await getSignedInUserEmail();
 
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} h-full scroll-smooth antialiased`}
     >
       <body className="min-h-full bg-slate-50 text-slate-900">
         <AppShell userEmail={userEmail}>{children}</AppShell>

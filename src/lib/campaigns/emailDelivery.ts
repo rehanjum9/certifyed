@@ -2,7 +2,7 @@ import { createServiceRoleClient } from "@/lib/supabase/server";
 import { buildCertificateFilename } from "@/lib/pdf/filename";
 import { STORAGE_BUCKETS } from "@/lib/supabase/storage";
 import { renderCertificateEmail } from "@/lib/email/template";
-import { sendCertificateEmail } from "@/lib/email/resend";
+import { sendCertificateEmail } from "@/lib/email/provider";
 import { requireCampaign, claimJob, toJobInfo, ROW_STALE_GENERATING_MS, type JobInfo } from "./generation";
 import type { Database } from "@/types/database";
 

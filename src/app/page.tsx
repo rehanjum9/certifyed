@@ -25,6 +25,7 @@ import {
   IconCheckCircle,
 } from "@/components/ui/icons";
 import { formatDate, formatRelativeTime } from "@/lib/format";
+import { resolveEmailProvider, getEmailProviderConfigError } from "@/lib/email/provider";
 
 const RECENT_CAMPAIGN_COUNT = 5;
 
@@ -60,7 +61,19 @@ export default async function DashboardPage() {
   ]);
 
   const hasSupabaseConfig = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SECRET_KEY);
-  const hasResendConfig = Boolean(process.env.RESEND_API_KEY && process.env.RESEND_FROM_EMAIL);
+
+  // Reflects whichever provider EMAIL_PROVIDER actually selects (defaults to
+  // Resend) -- never hardcodes Resend, so this stays correct when
+  // EMAIL_PROVIDER=gmail. An invalid EMAIL_PROVIDER value is itself a
+  // "not configured" state here rather than crashing the dashboard.
+  let emailProviderLabel = "Email";
+  let hasEmailProviderConfig = false;
+  try {
+    emailProviderLabel = resolveEmailProvider() === "gmail" ? "Gmail" : "Resend";
+    hasEmailProviderConfig = getEmailProviderConfigError() === null;
+  } catch {
+    // Invalid EMAIL_PROVIDER -- leave the generic label and "not configured".
+  }
 
   return (
     <PageContainer>
@@ -249,9 +262,9 @@ export default async function DashboardPage() {
             <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-4">
               <span className="flex items-center gap-2 text-sm text-slate-700">
                 <IconMail className="h-4 w-4 text-slate-400" />
-                Resend
+                {emailProviderLabel}
               </span>
-              {configuredBadge(hasResendConfig)}
+              {configuredBadge(hasEmailProviderConfig)}
             </div>
           </div>
         </section>

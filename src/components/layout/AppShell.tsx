@@ -29,9 +29,13 @@ export function AppShell({ children, userEmail }: AppShellProps) {
 
   if (PUBLIC_SITE_PATHS.has(pathname)) {
     return (
+      // No flex-grow on <main> here on purpose: stretching it to fill the
+      // viewport is exactly what pushes the footer down and leaves a large
+      // empty gap on shorter pages. The footer should just follow the
+      // content -- see the P1 UI-polish report for the full rationale.
       <div className="flex min-h-screen flex-col bg-white">
         <PublicHeader isAuthenticated={isAuthenticated} />
-        <main className="flex flex-1 flex-col">{children}</main>
+        <main>{children}</main>
         <PublicFooter isAuthenticated={isAuthenticated} />
       </div>
     );
@@ -43,7 +47,11 @@ export function AppShell({ children, userEmail }: AppShellProps) {
 
       <div className="flex min-h-screen flex-col lg:pl-64">
         <Header onMenuClick={() => setMobileNavOpen(true)} userEmail={userEmail} />
-        <main className="flex flex-1 flex-col">{children}</main>
+        {/* min-w-0: without it, a flex item defaults to min-width:auto, which
+            can let a wide child (e.g. the campaigns DataTable) force this
+            column -- and the page -- wider than the viewport instead of
+            scrolling locally inside the table's own overflow-x-auto box. */}
+        <main className="flex min-w-0 flex-1 flex-col">{children}</main>
       </div>
     </div>
   );

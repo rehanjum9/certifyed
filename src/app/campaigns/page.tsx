@@ -66,17 +66,17 @@ export default async function CampaignsPage() {
             <DataTableBody>
               {campaigns.map((campaign) => (
                 <DataTableRow key={campaign.id}>
-                  <DataTableTd className="font-medium text-slate-900">
+                  <DataTableTd className="max-w-[220px] font-medium break-words text-slate-900">
                     <Link href={`/campaigns/${campaign.id}`} className="hover:text-emerald-600">
                       {campaign.name}
                     </Link>
                   </DataTableTd>
-                  <DataTableTd>{campaign.templateName ?? "(deleted)"}</DataTableTd>
+                  <DataTableTd className="max-w-[140px] truncate">{campaign.templateName ?? "(deleted)"}</DataTableTd>
                   <DataTableTd className="font-mono text-xs">{campaign.rowCount}</DataTableTd>
                   <DataTableTd className="font-mono text-xs">{campaign.generated}</DataTableTd>
                   <DataTableTd className="font-mono text-xs text-slate-400">{campaign.invalidImportedTotal}</DataTableTd>
                   <DataTableTd className="font-mono text-xs">{campaign.emailsSent}</DataTableTd>
-                  <DataTableTd className="min-w-[120px]">
+                  <DataTableTd className="min-w-[100px]">
                     <ProgressBar percent={campaign.generationProgressPercent} />
                   </DataTableTd>
                   <DataTableTd>

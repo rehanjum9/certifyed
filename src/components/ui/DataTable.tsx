@@ -8,7 +8,7 @@ import { cn } from "@/lib/cn";
  */
 export function DataTable({ className, children, ...props }: HTMLAttributes<HTMLTableElement>) {
   return (
-    <div className="table-scroll overflow-x-auto rounded-lg border border-slate-200">
+    <div className="table-scroll min-w-0 overflow-x-auto rounded-lg border border-slate-200">
       <table className={cn("min-w-full divide-y divide-slate-200 text-sm", className)} {...props}>
         {children}
       </table>

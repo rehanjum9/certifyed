@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { processJob } from "@/lib/jobs/processJob";
+import { guardApiRoute } from "@/lib/auth/apiGuard";
+import { RATE_LIMITS } from "@/lib/rateLimit";
 
 /**
  * Trigger-independent worker endpoint: processes exactly one bounded
@@ -15,6 +17,9 @@ import { processJob } from "@/lib/jobs/processJob";
  * logic doesn't change either way.
  */
 export async function POST(_request: Request, { params }: RouteContext<"/api/jobs/[jobId]/process">) {
+  const guard = await guardApiRoute({ rateLimit: { key: "job-process", ...RATE_LIMITS.jobProcess } });
+  if ("response" in guard) return guard.response;
+
   const { jobId } = await params;
 
   try {

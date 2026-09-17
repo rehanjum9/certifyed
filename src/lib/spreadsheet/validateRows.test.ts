@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validateRows, type FieldMapping } from "./validateRows";
+import { validateRows, MAX_CELL_LENGTH, type FieldMapping } from "./validateRows";
 
 // Columns: [0]=Name [1]=Email [2]=Serial Number [3]=Department (optional)
 const nameField: FieldMapping = { field_key: "name", label: "Name", is_required: true, columnIndex: 0 };
@@ -103,6 +103,28 @@ describe("validateRows", () => {
     );
     expect(withoutSerialField.rows[0].status).toBe("valid");
     expect(withoutSerialField.rows[1].status).toBe("valid");
+  });
+
+  it("rejects (never truncates) a field value exceeding MAX_CELL_LENGTH", () => {
+    const tooLong = "x".repeat(MAX_CELL_LENGTH + 1);
+    const outcome = validateRows([["Ali Khan", "ali@example.com", tooLong, ""]], 1, [nameField, serialField]);
+    expect(outcome.rows[0].status).toBe("invalid");
+    expect(outcome.rows[0].errors).toContain(`Value for "Serial Number" exceeds ${MAX_CELL_LENGTH} characters.`);
+    // Never silently truncated -- the original (too-long) value is preserved, not cut down.
+    expect(outcome.rows[0].data.serial_number).toBe(tooLong);
+  });
+
+  it("accepts a field value at exactly MAX_CELL_LENGTH", () => {
+    const atLimit = "x".repeat(MAX_CELL_LENGTH);
+    const outcome = validateRows([["Ali Khan", "ali@example.com", atLimit, ""]], 1, [nameField, serialField]);
+    expect(outcome.rows[0].status).toBe("valid");
+  });
+
+  it("rejects (never truncates) a recipient email exceeding MAX_CELL_LENGTH", () => {
+    const tooLongEmail = `${"a".repeat(MAX_CELL_LENGTH)}@example.com`;
+    const outcome = validateRows([["Ali Khan", tooLongEmail, "CERT-001", ""]], 1, [nameField, serialField]);
+    expect(outcome.rows[0].status).toBe("invalid");
+    expect(outcome.rows[0].errors).toContain(`Email exceeds ${MAX_CELL_LENGTH} characters.`);
   });
 
   it("computes an accurate summary across mixed valid/invalid rows", () => {

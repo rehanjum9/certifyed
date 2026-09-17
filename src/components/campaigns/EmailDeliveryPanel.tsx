@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Spinner } from "@/components/ui/Spinner";
 import { Alert } from "@/components/ui/Alert";
-import { Input, Label } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 
@@ -29,6 +28,8 @@ interface EmailDeliveryPanelProps {
   campaignId: string;
   initialJob: EmailJobInfo | null;
   initialProgress: EmailProgressInfo;
+  /** Masked (e.g. "de***@example.com") -- never the full address. Null when RESEND_TEST_EMAIL isn't configured. */
+  maskedTestEmail: string | null;
 }
 
 interface ProcessResponse {
@@ -55,7 +56,7 @@ interface TestEmailResponse {
 
 const POLL_DELAY_MS = 500;
 
-export function EmailDeliveryPanel({ campaignId, initialJob, initialProgress }: EmailDeliveryPanelProps) {
+export function EmailDeliveryPanel({ campaignId, initialJob, initialProgress, maskedTestEmail }: EmailDeliveryPanelProps) {
   const router = useRouter();
   const [job, setJob] = useState<EmailJobInfo | null>(initialJob);
   const [progress, setProgress] = useState<EmailProgressInfo>(initialProgress);
@@ -63,7 +64,6 @@ export function EmailDeliveryPanel({ campaignId, initialJob, initialProgress }: 
   const [retrying, setRetrying] = useState(false);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [testEmail, setTestEmail] = useState("");
   const [testSending, setTestSending] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
   const [testError, setTestError] = useState<string | null>(null);
@@ -178,11 +178,7 @@ export function EmailDeliveryPanel({ campaignId, initialJob, initialProgress }: 
     setTestError(null);
     setTestResult(null);
     try {
-      const response = await fetch(`/api/campaigns/${campaignId}/test-email`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ testEmail: testEmail || undefined }),
-      });
+      const response = await fetch(`/api/campaigns/${campaignId}/test-email`, { method: "POST" });
       const body = (await response.json()) as TestEmailResponse;
       if (!response.ok || !body.messageId) {
         setTestError(body.error ?? "Failed to send test email.");
@@ -261,22 +257,22 @@ export function EmailDeliveryPanel({ campaignId, initialJob, initialProgress }: 
           <Badge variant="warning">Test mode</Badge>
           <p className="text-xs font-medium text-slate-600">Send a test email before bulk sending</p>
         </div>
-        <div className="flex flex-wrap items-end gap-2">
-          <div className="min-w-[220px] flex-1">
-            <Label htmlFor="test-email-input">Test recipient (optional if a dev address is configured)</Label>
-            <Input
-              id="test-email-input"
-              type="email"
-              placeholder="you@example.com"
-              value={testEmail}
-              onChange={(e) => setTestEmail(e.target.value)}
-            />
+        {maskedTestEmail ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-xs text-slate-500">
+              Test emails always go to the configured address:{" "}
+              <span className="font-mono text-slate-700">{maskedTestEmail}</span>
+            </p>
+            <Button variant="secondary" size="sm" onClick={handleSendTest} disabled={testSending}>
+              {testSending && <Spinner className="h-4 w-4" />}
+              Send Test Email
+            </Button>
           </div>
-          <Button variant="secondary" size="sm" onClick={handleSendTest} disabled={testSending}>
-            {testSending && <Spinner className="h-4 w-4" />}
-            Send Test Email
-          </Button>
-        </div>
+        ) : (
+          <p className="text-xs text-slate-500">
+            Configure <span className="font-mono">RESEND_TEST_EMAIL</span> in your environment to enable test sends.
+          </p>
+        )}
         {testResult && <p className="mt-2 text-xs text-emerald-700">{testResult}</p>}
         {testError && <p className="mt-2 text-xs text-red-700">{testError}</p>}
       </div>

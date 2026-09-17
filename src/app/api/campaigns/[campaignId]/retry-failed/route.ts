@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { retryFailedRows } from "@/lib/campaigns/generation";
+import { guardApiRoute } from "@/lib/auth/apiGuard";
+import { RATE_LIMITS } from "@/lib/rateLimit";
 
 /**
  * Re-queues failed rows that would now pass eligibility back to "pending"
@@ -10,6 +12,9 @@ export async function POST(
   _request: Request,
   { params }: RouteContext<"/api/campaigns/[campaignId]/retry-failed">,
 ) {
+  const guard = await guardApiRoute({ rateLimit: { key: "retry-generation", ...RATE_LIMITS.retryGeneration } });
+  if ("response" in guard) return guard.response;
+
   const { campaignId } = await params;
 
   try {

@@ -193,6 +193,11 @@ export interface Database {
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      increment_rate_limit: {
+        Args: { p_bucket_key: string; p_window_start: string };
+        Returns: number;
+      };
+    };
   };
 }

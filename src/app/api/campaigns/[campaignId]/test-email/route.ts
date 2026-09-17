@@ -1,27 +1,26 @@
 import { NextResponse } from "next/server";
 import { sendTestCertificateEmail } from "@/lib/campaigns/emailDelivery";
+import { guardApiRoute } from "@/lib/auth/apiGuard";
+import { RATE_LIMITS } from "@/lib/rateLimit";
 
 /**
- * Sends ONE test certificate email -- to a manually entered address, or
- * the configured RESEND_TEST_EMAIL developer default -- using an already
- * generated certificate. Never mutates the source row's status/
- * email_message_id, so it's safe to call repeatedly before a real bulk
- * send to verify sender/domain/attachment formatting.
+ * Sends ONE test certificate email to the configured RESEND_TEST_EMAIL
+ * address only -- never to a caller-supplied destination. This is a
+ * deliberate security boundary (see the Phase 8/P0 security report): an
+ * arbitrary-destination test-send is an open email-relay primitive once
+ * exposed publicly, so the destination is fixed server-side and never
+ * accepted from the request body.
  */
-export async function POST(request: Request, { params }: RouteContext<"/api/campaigns/[campaignId]/test-email">) {
+export async function POST(_request: Request, { params }: RouteContext<"/api/campaigns/[campaignId]/test-email">) {
+  const guard = await guardApiRoute({ rateLimit: { key: "test-email", ...RATE_LIMITS.testEmail } });
+  if ("response" in guard) return guard.response;
+
   const { campaignId } = await params;
 
-  let body: { testEmail?: string } = {};
-  try {
-    body = await request.json();
-  } catch {
-    // No JSON body supplied -- fall back to the configured developer address below.
-  }
-
-  const testEmail = body.testEmail?.trim() || process.env.RESEND_TEST_EMAIL;
+  const testEmail = process.env.RESEND_TEST_EMAIL;
   if (!testEmail) {
     return NextResponse.json(
-      { error: "Enter a test email address, or configure RESEND_TEST_EMAIL for a default developer address." },
+      { error: "Test sending is not configured. Set RESEND_TEST_EMAIL in your environment before sending a test email." },
       { status: 400 },
     );
   }

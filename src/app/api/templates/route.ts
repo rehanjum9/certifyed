@@ -3,10 +3,15 @@ import { processUploadedSvg } from "@/lib/svg/process";
 import { MAX_SVG_UPLOAD_BYTES } from "@/lib/svg/constants";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { STORAGE_BUCKETS } from "@/lib/supabase/storage";
+import { guardApiRoute } from "@/lib/auth/apiGuard";
+import { RATE_LIMITS } from "@/lib/rateLimit";
 
 const MAX_NAME_LENGTH = 200;
 
 export async function POST(request: Request) {
+  const guard = await guardApiRoute({ rateLimit: { key: "template-create", ...RATE_LIMITS.templateCreate } });
+  if ("response" in guard) return guard.response;
+
   let formData: FormData;
   try {
     formData = await request.formData();

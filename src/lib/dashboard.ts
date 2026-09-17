@@ -49,10 +49,55 @@ export interface DashboardActivityEntry {
 
 const RECENT_LIMIT = 4;
 
+export interface ActivitySourceRows {
+  /** Only timestamps -- deliberately no recipient name/email/data (see buildActivityEntries doc comment). */
+  generatedRows: { updated_at: string }[];
+  sentRows: { emailed_at: string | null }[];
+  completedCampaigns: { name: string; updated_at: string }[];
+  newTemplates: { name: string; created_at: string }[];
+}
+
+/**
+ * Pure activity-feed builder. Deliberately takes NO recipient-identifying
+ * fields (no name, no email, no row data) -- this dashboard has no login
+ * wall around *who* can see it beyond "is an authenticated operator," and
+ * even for the operator, generic activity text is the safer default. See
+ * the P0 security report (PRIV-DASHBOARD-01): the previous version of this
+ * function interpolated recipient name/email directly into the feed text,
+ * which is exactly the shape of bug this function's input type now makes
+ * impossible to reintroduce by accident.
+ */
+export function buildActivityEntries(sources: ActivitySourceRows): DashboardActivityEntry[] {
+  const entries: DashboardActivityEntry[] = [];
+
+  for (const row of sources.generatedRows) {
+    entries.push({ kind: "generated", text: "Certificate generated", timestamp: row.updated_at });
+  }
+
+  for (const row of sources.sentRows) {
+    if (!row.emailed_at) continue;
+    entries.push({ kind: "sent", text: "Certificate sent", timestamp: row.emailed_at });
+  }
+
+  for (const campaign of sources.completedCampaigns) {
+    entries.push({ kind: "campaign_completed", text: `Campaign completed: ${campaign.name}`, timestamp: campaign.updated_at });
+  }
+
+  for (const template of sources.newTemplates) {
+    entries.push({ kind: "template_created", text: `Template uploaded: ${template.name}`, timestamp: template.created_at });
+  }
+
+  entries.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  return entries.slice(0, RECENT_LIMIT + 2);
+}
+
 /**
  * A best-effort recent-activity feed assembled from real row/campaign/
  * template timestamps that already exist -- never a fabricated timeline.
- * Each entry corresponds to one real, already-persisted change.
+ * Each entry corresponds to one real, already-persisted change. Only
+ * timestamps (and, for campaigns/templates, their own non-recipient name)
+ * are ever selected from campaign_rows -- no recipient email or row data
+ * column is fetched here at all, so it cannot leak into the feed.
  */
 export async function getRecentActivity(): Promise<DashboardActivityEntry[]> {
   const supabase = createServiceRoleClient();
@@ -60,13 +105,13 @@ export async function getRecentActivity(): Promise<DashboardActivityEntry[]> {
   const [generatedRows, sentRows, completedCampaigns, newTemplates] = await Promise.all([
     supabase
       .from("campaign_rows")
-      .select("data, recipient_email, updated_at")
+      .select("updated_at")
       .eq("status", "generated")
       .order("updated_at", { ascending: false })
       .limit(RECENT_LIMIT),
     supabase
       .from("campaign_rows")
-      .select("recipient_email, emailed_at")
+      .select("emailed_at")
       .eq("status", "sent")
       .not("emailed_at", "is", null)
       .order("emailed_at", { ascending: false })
@@ -84,31 +129,10 @@ export async function getRecentActivity(): Promise<DashboardActivityEntry[]> {
     if (result.error) throw new Error(`Failed to load recent activity: ${result.error.message}`);
   }
 
-  const entries: DashboardActivityEntry[] = [];
-
-  for (const row of generatedRows.data ?? []) {
-    const rowData = (row.data ?? {}) as Record<string, string>;
-    const who = rowData.name || row.recipient_email || "a recipient";
-    entries.push({ kind: "generated", text: `Generated certificate for ${who}`, timestamp: row.updated_at });
-  }
-
-  for (const row of sentRows.data ?? []) {
-    if (!row.emailed_at) continue;
-    entries.push({
-      kind: "sent",
-      text: `Sent certificate to ${row.recipient_email ?? "a recipient"}`,
-      timestamp: row.emailed_at,
-    });
-  }
-
-  for (const campaign of completedCampaigns.data ?? []) {
-    entries.push({ kind: "campaign_completed", text: `Campaign completed: ${campaign.name}`, timestamp: campaign.updated_at });
-  }
-
-  for (const template of newTemplates.data ?? []) {
-    entries.push({ kind: "template_created", text: `Template uploaded: ${template.name}`, timestamp: template.created_at });
-  }
-
-  entries.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-  return entries.slice(0, RECENT_LIMIT + 2);
+  return buildActivityEntries({
+    generatedRows: generatedRows.data ?? [],
+    sentRows: sentRows.data ?? [],
+    completedCampaigns: completedCampaigns.data ?? [],
+    newTemplates: newTemplates.data ?? [],
+  });
 }

@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getCampaign } from "@/lib/campaigns";
 import { getActiveEmailJob, getLatestEmailJob, startEmailJob } from "@/lib/campaigns/emailJobs";
 import { computeEmailProgress } from "@/lib/campaigns/emailDelivery";
+import { guardApiRoute } from "@/lib/auth/apiGuard";
+import { RATE_LIMITS } from "@/lib/rateLimit";
 
 function toJobInfo(job: { id: string; status: string; attempts: number; last_error: string | null } | null) {
   if (!job) return null;
@@ -13,6 +15,9 @@ function toJobInfo(job: { id: string; status: string; attempts: number; last_err
  * database-derived email progress. Mirrors GET .../generation.
  */
 export async function GET(_request: Request, { params }: RouteContext<"/api/campaigns/[campaignId]/email">) {
+  const guard = await guardApiRoute();
+  if ("response" in guard) return guard.response;
+
   const { campaignId } = await params;
   const campaign = await getCampaign(campaignId);
   if (!campaign) {
@@ -31,6 +36,9 @@ export async function GET(_request: Request, { params }: RouteContext<"/api/camp
  * POST /api/jobs/[jobId]/process to actually run batches.
  */
 export async function POST(_request: Request, { params }: RouteContext<"/api/campaigns/[campaignId]/email">) {
+  const guard = await guardApiRoute({ rateLimit: { key: "email-start", ...RATE_LIMITS.emailStart } });
+  if ("response" in guard) return guard.response;
+
   const { campaignId } = await params;
   const campaign = await getCampaign(campaignId);
   if (!campaign) {

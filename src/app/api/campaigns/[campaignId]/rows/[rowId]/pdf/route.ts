@@ -3,6 +3,7 @@ import { getCampaignRow } from "@/lib/campaigns";
 import { buildCertificateFilename } from "@/lib/pdf/filename";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { STORAGE_BUCKETS } from "@/lib/supabase/storage";
+import { guardApiRoute } from "@/lib/auth/apiGuard";
 
 /**
  * Secure download proxy: the output bucket is private, so every download
@@ -13,6 +14,9 @@ export async function GET(
   _request: Request,
   { params }: RouteContext<"/api/campaigns/[campaignId]/rows/[rowId]/pdf">,
 ) {
+  const guard = await guardApiRoute();
+  if ("response" in guard) return guard.response;
+
   const { campaignId, rowId } = await params;
   const row = await getCampaignRow(campaignId, rowId);
 

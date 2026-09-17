@@ -1,5 +1,6 @@
 import { sanitizeSvg } from "./sanitize";
 import { parseSvgRoot, parseSvgDimensions } from "./parseDimensions";
+import { MAX_SVG_DIMENSION } from "./constants";
 
 export interface ProcessedSvg {
   sanitizedSvg: string;
@@ -42,6 +43,13 @@ export function processUploadedSvg(raw: string): ProcessSvgOutcome {
     return {
       ok: false,
       error: "The SVG has no usable viewBox or width/height, so it can't be placed on a canvas.",
+    };
+  }
+
+  if (dims.width > MAX_SVG_DIMENSION || dims.height > MAX_SVG_DIMENSION) {
+    return {
+      ok: false,
+      error: `SVG dimensions are too large (max ${MAX_SVG_DIMENSION} units per side; got ${dims.width}×${dims.height}).`,
     };
   }
 

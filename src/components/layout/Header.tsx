@@ -1,7 +1,8 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { IconMenu, IconSearch } from "@/components/ui/icons";
+import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -28,7 +29,15 @@ function breadcrumbFromPathname(pathname: string): string[] {
 
 export function Header({ onMenuClick }: HeaderProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const crumbs = breadcrumbFromPathname(pathname);
+
+  async function handleLogout() {
+    const supabase = createBrowserSupabaseClient();
+    await supabase.auth.signOut();
+    router.push("/login");
+    router.refresh();
+  }
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-slate-200 bg-white/80 px-4 backdrop-blur sm:px-6 lg:px-8">
@@ -60,12 +69,14 @@ export function Header({ onMenuClick }: HeaderProps) {
             Ctrl K
           </kbd>
         </div>
-        <div
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-200 font-mono text-xs font-medium text-slate-600"
-          aria-hidden="true"
+        <button
+          type="button"
+          onClick={handleLogout}
+          title="Log out"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-200 font-mono text-xs font-medium text-slate-600 transition-colors hover:bg-slate-300"
         >
           U
-        </div>
+        </button>
       </div>
     </header>
   );

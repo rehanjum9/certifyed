@@ -40,6 +40,9 @@ export interface ValidationOutcome {
 
 export const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/** Caps a single cell's length -- prevents a pathologically long value from making per-row PDF/email rendering (font-fit measurement, in particular) disproportionately expensive. Rows over this are rejected with a clear error, never silently truncated. */
+export const MAX_CELL_LENGTH = 1000;
+
 function toRowNumbers(indices: number[]): string {
   // +2: spreadsheet row 1 is the header, so data row 0 is spreadsheet row 2.
   return indices.map((i) => i + 2).join(", ");
@@ -99,6 +102,8 @@ export function validateExtractedRows(
     const rawEmail = row.recipientEmail;
     if (!rawEmail) {
       errors.push("Missing recipient email.");
+    } else if (rawEmail.length > MAX_CELL_LENGTH) {
+      errors.push(`Email exceeds ${MAX_CELL_LENGTH} characters.`);
     } else if (!EMAIL_PATTERN.test(rawEmail)) {
       errors.push("Invalid email format.");
     } else {
@@ -112,6 +117,8 @@ export function validateExtractedRows(
       const value = row.data[field.field_key] ?? "";
       if (field.is_required && !value.trim()) {
         errors.push(`Missing required value for "${field.label}".`);
+      } else if (value.length > MAX_CELL_LENGTH) {
+        errors.push(`Value for "${field.label}" exceeds ${MAX_CELL_LENGTH} characters.`);
       }
     }
 

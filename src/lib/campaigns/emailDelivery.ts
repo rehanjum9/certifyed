@@ -421,12 +421,15 @@ export async function sendTestCertificateEmail({ campaignId, rowId, testEmail }:
   const rowData = (row.data ?? {}) as Record<string, string>;
   const recipientName = rowData.name || null;
   const serialNumber = rowData.serial_number || null;
-  const { html, text } = renderCertificateEmail({ recipientName, campaignName: campaign.name, serialNumber });
+  const { subject, html, text } = renderCertificateEmail({ recipientName, campaignName: campaign.name, serialNumber });
   const filename = buildCertificateFilename({ recipientName, serialNumber, rowId: row.id });
 
   const result = await sendCertificateEmail({
     to: testEmail,
-    subject: `[TEST] Your certificate — ${campaign.name}`,
+    // Reuses the same sanitized subject as a real send (renderCertificateEmail
+    // already strips header-injection characters from campaign.name) --
+    // never builds a second, unsanitized subject string from raw campaign data.
+    subject: `[TEST] ${subject}`,
     html: `<p style="color:#b45309;font-weight:600;">This is a TEST email -- not sent to the real recipient.</p>${html}`,
     text: `THIS IS A TEST EMAIL -- not sent to the real recipient.\n\n${text}`,
     attachment: { filename, content: pdfBuffer },

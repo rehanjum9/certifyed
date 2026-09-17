@@ -21,6 +21,7 @@ const buckets = [
   { id: "certificate-templates", public: false },
   { id: "certificate-uploads", public: false },
   { id: "certificate-outputs", public: false },
+  { id: "certificate-fonts", public: false },
 ];
 
 for (const bucket of buckets) {

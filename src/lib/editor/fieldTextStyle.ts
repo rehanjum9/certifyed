@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import { getCssFontFamily } from "@/lib/fonts";
+import type { CustomFontMeta } from "@/lib/fonts";
 import { measureTextWidth, measureLineHeight } from "./measureText";
 import { resolveFieldLayout } from "@/lib/pdf/textLayout";
 import type { EditorField } from "./types";
@@ -28,14 +29,20 @@ export interface FittedFieldLayout {
  * `canvasWidth` (SVG units, optional) lets auto_width growth clamp itself
  * to the certificate bounds; omit it to allow unclamped growth (e.g. a
  * quick preview where the canvas size isn't at hand).
+ *
+ * `customFonts` (optional) resolves a field's font_family to a registered
+ * custom font's CSS family when it isn't one of the built-ins -- see
+ * lib/fonts/useLoadCustomFonts.ts, which is what actually registers that
+ * family with the browser before this can render/measure correctly.
  */
 export function computeFieldTextStyle(
   field: EditorField,
   text: string,
   scale: number,
   canvasWidth?: number,
+  customFonts: CustomFontMeta[] = [],
 ): FittedFieldLayout {
-  const cssFontFamily = getCssFontFamily(field.font_family);
+  const cssFontFamily = getCssFontFamily(field.font_family, customFonts);
   const measurer = {
     measureWidth: (t: string, size: number) => measureTextWidth(t, size, cssFontFamily, field.font_weight),
     measureLineHeight: (size: number) => measureLineHeight(size, cssFontFamily, field.font_weight),

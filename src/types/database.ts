@@ -22,6 +22,7 @@ export type CampaignRowStatus =
   | "failed";
 export type JobType = "generate_pdfs" | "send_emails";
 export type JobStatus = "pending" | "running" | "completed" | "failed";
+export type FontFormat = "ttf" | "otf";
 
 export interface Database {
   public: {
@@ -191,6 +192,31 @@ export interface Database {
           locked_at?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["jobs"]["Insert"]>;
+        Relationships: [];
+      };
+      fonts: {
+        Row: {
+          id: string;
+          display_name: string;
+          original_filename: string;
+          storage_path: string;
+          format: FontFormat;
+          font_weight: string;
+          file_size: number;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          display_name: string;
+          original_filename: string;
+          storage_path: string;
+          format: FontFormat;
+          font_weight?: string;
+          file_size: number;
+          created_by?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["fonts"]["Insert"]>;
         Relationships: [];
       };
     };

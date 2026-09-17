@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AppShell } from "@/components/layout/AppShell";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -18,14 +19,18 @@ export const metadata: Metadata = {
   description: "Bulk certificate generation from SVG templates and Excel rosters",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const supabase = await createServerSupabaseClient();
+  const { data } = await supabase.auth.getUser();
+  const userEmail = data.user?.email ?? null;
+
   return (
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full bg-slate-50 text-slate-900">
-        <AppShell>{children}</AppShell>
+        <AppShell userEmail={userEmail}>{children}</AppShell>
       </body>
     </html>
   );

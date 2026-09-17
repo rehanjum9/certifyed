@@ -4,9 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Spinner } from "@/components/ui/Spinner";
-import { Alert } from "@/components/ui/Alert";
+import { Alert, type AlertVariant } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
+import { describeEmailCompletion } from "@/lib/campaigns/emailStatusCopy";
 
 export interface EmailJobInfo {
   id: string;
@@ -184,7 +185,7 @@ export function EmailDeliveryPanel({ campaignId, initialJob, initialProgress, ma
         setTestError(body.error ?? "Failed to send test email.");
         return;
       }
-      setTestResult(`Test email sent (message id: ${body.messageId}). This did not mark any recipient row as sent.`);
+      setTestResult("Test email sent. This did not mark any recipient as sent.");
     } catch {
       setTestError("Failed to send test email. Check your connection.");
     } finally {
@@ -194,13 +195,26 @@ export function EmailDeliveryPanel({ campaignId, initialJob, initialProgress, ma
 
   const isActive = job?.status === "pending" || job?.status === "running";
   const hasEmailWork = progress.pending > 0 || progress.emailing > 0;
+  // Reached only when a batch already ran to the end (no row left pending
+  // or mid-send) -- this is the one place allowed to declare completion,
+  // and it always derives that claim from real counts (see
+  // describeEmailCompletion), never a blanket "all emailed" assumption.
+  const completion = !isActive && !hasEmailWork ? describeEmailCompletion(progress) : null;
+  const completionAlertVariant: AlertVariant =
+    completion?.tone === "success" ? "success" : completion?.tone === "warning" ? "warning" : "info";
 
   return (
     <div className="flex flex-col gap-4">
       {progress.eligibleTotal === 0 && !isActive ? (
         <p className="text-sm text-slate-500">Generate certificates first — nothing is ready to email yet.</p>
-      ) : !isActive && !hasEmailWork ? (
-        <Alert variant="success">All eligible certificates have been emailed.</Alert>
+      ) : completion ? (
+        <Alert variant={completionAlertVariant}>
+          {completion.lines.map((line, index) => (
+            <p key={index} className={index > 0 ? "mt-1" : undefined}>
+              {line}
+            </p>
+          ))}
+        </Alert>
       ) : !isActive && !job ? (
         <Button onClick={handleStart} disabled={starting}>
           {starting && <Spinner className="h-4 w-4" />}
@@ -210,10 +224,10 @@ export function EmailDeliveryPanel({ campaignId, initialJob, initialProgress, ma
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium text-slate-900">
-              {running ? "Sending certificates..." : isActive ? "Sending paused" : "Sending complete"}
+              {running ? "Sending certificates..." : isActive ? "Sending paused" : "More certificates to send"}
             </span>
-            <Badge variant={running ? "info" : isActive ? "neutral" : "success"} bracket={false}>
-              {running ? "Sending" : isActive ? "Paused" : "Completed"}
+            <Badge variant={running ? "info" : "neutral"} bracket={false}>
+              {running ? "Sending" : isActive ? "Paused" : "Pending"}
             </Badge>
           </div>
           <ProgressBar percent={progress.progressPercent} tone="sky" />
@@ -252,27 +266,25 @@ export function EmailDeliveryPanel({ campaignId, initialJob, initialProgress, ma
       {job?.lastError && !isActive && <Alert variant="error">Last error: {job.lastError}</Alert>}
       {error && <Alert variant="error">{error}</Alert>}
 
-      <div className="rounded-lg border border-dashed border-amber-300 bg-amber-50/40 p-3">
-        <div className="mb-2 flex items-center gap-2">
-          <Badge variant="warning">Test mode</Badge>
-          <p className="text-xs font-medium text-slate-600">Send a test email before bulk sending</p>
-        </div>
-        {maskedTestEmail ? (
-          <div className="flex flex-wrap items-center gap-3">
-            <p className="text-xs text-slate-500">
-              Test emails always go to the configured address:{" "}
-              <span className="font-mono text-slate-700">{maskedTestEmail}</span>
-            </p>
+      <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium text-slate-700">Test delivery</p>
+            {maskedTestEmail ? (
+              <p className="mt-0.5 text-xs text-slate-500">
+                Sends one sample certificate to <span className="font-mono text-slate-700">{maskedTestEmail}</span>.
+              </p>
+            ) : (
+              <p className="mt-0.5 text-xs text-slate-500">Test sending isn&apos;t configured yet.</p>
+            )}
+          </div>
+          {maskedTestEmail && (
             <Button variant="secondary" size="sm" onClick={handleSendTest} disabled={testSending}>
               {testSending && <Spinner className="h-4 w-4" />}
-              Send Test Email
+              Send test email
             </Button>
-          </div>
-        ) : (
-          <p className="text-xs text-slate-500">
-            Configure <span className="font-mono">RESEND_TEST_EMAIL</span> in your environment to enable test sends.
-          </p>
-        )}
+          )}
+        </div>
         {testResult && <p className="mt-2 text-xs text-emerald-700">{testResult}</p>}
         {testError && <p className="mt-2 text-xs text-red-700">{testError}</p>}
       </div>

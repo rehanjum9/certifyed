@@ -1,10 +1,10 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 vi.mock("@/lib/supabase/server", () => ({ createServiceRoleClient: vi.fn() }));
-vi.mock("@/lib/email/resend", () => ({ sendCertificateEmail: vi.fn() }));
+vi.mock("@/lib/email/provider", () => ({ sendCertificateEmail: vi.fn() }));
 
 import { createServiceRoleClient } from "@/lib/supabase/server";
-import { sendCertificateEmail } from "@/lib/email/resend";
+import { sendCertificateEmail } from "@/lib/email/provider";
 import { sendTestCertificateEmail } from "./emailDelivery";
 
 /** A stub where every chained call returns itself; the terminal read always resolves to `result`. Robust to the exact method-call sequence a real Supabase query builder uses. */

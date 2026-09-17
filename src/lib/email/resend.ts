@@ -1,22 +1,7 @@
 import { Resend } from "resend";
+import type { SendCertificateEmailInput, SendCertificateEmailResult } from "./types";
 
-export interface EmailAttachment {
-  filename: string;
-  content: Buffer;
-}
-
-export interface SendCertificateEmailInput {
-  to: string;
-  subject: string;
-  html: string;
-  text: string;
-  attachment: EmailAttachment;
-}
-
-export interface SendCertificateEmailResult {
-  /** The provider's own id for this send. Acceptance by Resend, not confirmed inbox delivery -- see the Phase 7 report. */
-  messageId: string;
-}
+export type { EmailAttachment, SendCertificateEmailInput, SendCertificateEmailResult } from "./types";
 
 /**
  * Minimal shape this module actually needs from the Resend SDK. Kept

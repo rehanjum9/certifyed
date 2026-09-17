@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCampaign } from "@/lib/campaigns";
 import { getActiveEmailJob, getLatestEmailJob, startEmailJob } from "@/lib/campaigns/emailJobs";
 import { computeEmailProgress } from "@/lib/campaigns/emailDelivery";
+import { getEmailProviderConfigError } from "@/lib/email/provider";
 import { guardApiRoute } from "@/lib/auth/apiGuard";
 import { RATE_LIMITS } from "@/lib/rateLimit";
 
@@ -51,14 +52,9 @@ export async function POST(_request: Request, { params }: RouteContext<"/api/cam
     return NextResponse.json({ error: "No generated certificates are ready to email yet." }, { status: 400 });
   }
 
-  if (!process.env.RESEND_API_KEY || !process.env.RESEND_FROM_EMAIL) {
-    return NextResponse.json(
-      {
-        error:
-          "Email sending is not configured. Set RESEND_API_KEY and RESEND_FROM_EMAIL (a verified Resend sending domain) in your environment before sending certificates.",
-      },
-      { status: 400 },
-    );
+  const configError = getEmailProviderConfigError();
+  if (configError) {
+    return NextResponse.json({ error: configError }, { status: 400 });
   }
 
   const { job, created } = await startEmailJob(campaignId);

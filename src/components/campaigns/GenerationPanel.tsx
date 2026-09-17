@@ -4,9 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Spinner } from "@/components/ui/Spinner";
-import { Alert } from "@/components/ui/Alert";
+import { Alert, type AlertVariant } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
+import { describeGenerationCompletion } from "@/lib/campaigns/generationStatusCopy";
 
 export interface JobInfo {
   id: string;
@@ -170,12 +171,24 @@ export function GenerationPanel({ campaignId, initialJob, initialProgress }: Gen
   const isActive = job?.status === "pending" || job?.status === "running";
   const remaining = Math.max(0, progress.eligibleTotal - progress.generated - progress.failed);
   const hasEligibleWork = progress.pending > 0 || progress.generating > 0;
+  // Reached only once a batch has run to the end -- always derives its
+  // claim from real counts (see describeGenerationCompletion), never a
+  // blanket "generated" assumption regardless of failures.
+  const completion = !isActive && !hasEligibleWork && progress.eligibleTotal > 0 ? describeGenerationCompletion(progress) : null;
+  const completionAlertVariant: AlertVariant =
+    completion?.tone === "success" ? "success" : completion?.tone === "warning" ? "warning" : "info";
 
   return (
     <div className="flex flex-col gap-4">
       {!isActive && !hasEligibleWork ? (
-        progress.eligibleTotal > 0 ? (
-          <Alert variant="success">Certificates generated.</Alert>
+        completion ? (
+          <Alert variant={completionAlertVariant}>
+            {completion.lines.map((line, index) => (
+              <p key={index} className={index > 0 ? "mt-1" : undefined}>
+                {line}
+              </p>
+            ))}
+          </Alert>
         ) : (
           <p className="text-sm text-slate-500">No eligible rows to generate yet.</p>
         )
@@ -188,10 +201,10 @@ export function GenerationPanel({ campaignId, initialJob, initialProgress }: Gen
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium text-slate-900">
-              {running ? "Generating certificates..." : isActive ? "Generation paused" : "Certificates generated"}
+              {running ? "Generating certificates..." : isActive ? "Generation paused" : "More certificates to generate"}
             </span>
-            <Badge variant={running ? "info" : isActive ? "neutral" : "success"} bracket={false}>
-              {running ? "Processing" : isActive ? "Paused" : "Completed"}
+            <Badge variant={running ? "info" : "neutral"} bracket={false}>
+              {running ? "Processing" : isActive ? "Paused" : "Pending"}
             </Badge>
           </div>
           <ProgressBar percent={progress.progressPercent} tone="emerald" />

@@ -105,33 +105,35 @@ export default async function DashboardPage() {
             <DataTable>
               <DataTableHead>
                 <DataTableTh>Name</DataTableTh>
-                <DataTableTh>Template</DataTableTh>
+                <DataTableTh className="hidden lg:table-cell">Template</DataTableTh>
                 <DataTableTh>Recipients</DataTableTh>
                 <DataTableTh>Generated</DataTableTh>
                 <DataTableTh>Emails sent</DataTableTh>
-                <DataTableTh>Progress</DataTableTh>
+                <DataTableTh className="hidden lg:table-cell">Progress</DataTableTh>
                 <DataTableTh>Status</DataTableTh>
-                <DataTableTh>Created</DataTableTh>
+                <DataTableTh className="hidden xl:table-cell">Created</DataTableTh>
               </DataTableHead>
               <DataTableBody>
                 {recentCampaigns.map((campaign) => (
                   <DataTableRow key={campaign.id} className="cursor-pointer">
-                    <DataTableTd className="font-medium text-slate-900">
+                    <DataTableTd className="max-w-[220px] font-medium break-words text-slate-900">
                       <Link href={`/campaigns/${campaign.id}`} className="hover:text-emerald-600">
                         {campaign.name}
                       </Link>
                     </DataTableTd>
-                    <DataTableTd>{campaign.templateName ?? "(deleted)"}</DataTableTd>
+                    <DataTableTd className="hidden max-w-[140px] truncate lg:table-cell">
+                      {campaign.templateName ?? "(deleted)"}
+                    </DataTableTd>
                     <DataTableTd className="font-mono text-xs">{campaign.rowCount}</DataTableTd>
                     <DataTableTd className="font-mono text-xs">{campaign.generated}</DataTableTd>
                     <DataTableTd className="font-mono text-xs">{campaign.emailsSent}</DataTableTd>
-                    <DataTableTd className="min-w-[120px]">
+                    <DataTableTd className="hidden min-w-[100px] lg:table-cell">
                       <ProgressBar percent={campaign.generationProgressPercent} />
                     </DataTableTd>
                     <DataTableTd>
                       <Badge variant={campaignStatusVariant(campaign.status)}>{campaign.status}</Badge>
                     </DataTableTd>
-                    <DataTableTd className="whitespace-nowrap text-xs text-slate-500">
+                    <DataTableTd className="hidden whitespace-nowrap text-xs text-slate-500 xl:table-cell">
                       {formatDate(campaign.created_at)}
                     </DataTableTd>
                   </DataTableRow>

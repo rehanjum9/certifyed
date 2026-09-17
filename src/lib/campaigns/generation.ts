@@ -408,17 +408,32 @@ async function recoverStaleGeneratingRows(campaignId: string): Promise<number> {
   return data?.length ?? 0;
 }
 
+export interface JobClaimResult {
+  /** False when another worker already holds a fresh lock -- `job` is still the row this call read, just not claimed by it. */
+  claimed: boolean;
+  job: JobRow;
+}
+
 /**
  * Claims a job for processing: succeeds only if the job is "pending", or
  * is "running" with a lock older than JOB_STALE_LOCK_MS (a previous worker
  * that crashed without releasing it). The WHERE clause is re-checked by
  * Postgres atomically inside the UPDATE itself, so two concurrent calls
  * can never both claim the same job -- whichever UPDATE commits first
- * "wins"; the second matches zero rows and gets null back. Same documented
- * simplification as Phase 5's row-claiming: not `FOR UPDATE SKIP LOCKED`,
- * but correct against double-claiming.
+ * "wins"; the second matches zero rows. Same documented simplification as
+ * Phase 5's row-claiming: not `FOR UPDATE SKIP LOCKED`, but correct against
+ * double-claiming.
+ *
+ * Returns the job row either way (claimed or not) instead of just `null` on
+ * a lost claim, so callers never need a second, identical SELECT purely to
+ * report status back to a poller that didn't win this tick -- this read
+ * already has it. `null` is reserved for "no such job at all". On a lost
+ * claim, `job` is the pre-update snapshot this call read (a few
+ * milliseconds old at most); the next poll tick reads fresh state again, so
+ * this never affects claiming correctness, only how current a
+ * losing-tick's *display* status is.
  */
-export async function claimJob(jobId: string): Promise<JobRow | null> {
+export async function claimJob(jobId: string): Promise<JobClaimResult | null> {
   const supabase = createServiceRoleClient();
 
   const { data: existing, error: readError } = await supabase
@@ -441,7 +456,7 @@ export async function claimJob(jobId: string): Promise<JobRow | null> {
     .maybeSingle();
 
   if (updateError) throw new Error(`Failed to claim job: ${updateError.message}`);
-  return claimed;
+  return claimed ? { claimed: true, job: claimed } : { claimed: false, job: existing };
 }
 
 export interface JobInfo {
@@ -474,22 +489,23 @@ export interface ProcessJobResult {
 export async function processGenerationJob(jobId: string, requestedBatchSize?: number): Promise<ProcessJobResult> {
   const supabase = createServiceRoleClient();
 
-  const claimedJob = await claimJob(jobId);
+  const claimResult = await claimJob(jobId);
+  if (!claimResult) throw new Error("Job not found.");
 
-  if (!claimedJob) {
-    const { data: existing, error } = await supabase.from("jobs").select("*").eq("id", jobId).maybeSingle();
-    if (error) throw new Error(`Failed to load job: ${error.message}`);
-    if (!existing) throw new Error("Job not found.");
-
-    const progress = await computeCampaignProgress(existing.campaign_id);
+  if (!claimResult.claimed) {
+    // Someone else holds the lock -- report status from the row claimJob
+    // already read rather than issuing a second, identical SELECT.
+    const progress = await computeCampaignProgress(claimResult.job.campaign_id);
     return {
       claimed: false,
-      job: toJobInfo(existing),
-      campaignId: existing.campaign_id,
+      job: toJobInfo(claimResult.job),
+      campaignId: claimResult.job.campaign_id,
       batch: null,
       progress,
     };
   }
+
+  const claimedJob = claimResult.job;
 
   try {
     await recoverStaleGeneratingRows(claimedJob.campaign_id);

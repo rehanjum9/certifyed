@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { parseSpreadsheet } from "@/lib/spreadsheet/parse";
 import { MAX_SPREADSHEET_UPLOAD_BYTES } from "@/lib/spreadsheet/constants";
 import { guardApiRoute } from "@/lib/auth/apiGuard";
+import { exceedsDeclaredContentLength } from "@/lib/upload/contentLength";
 
 /**
  * Stateless parse-and-return: drives the upload/mapping/validate/preview
@@ -12,6 +13,16 @@ import { guardApiRoute } from "@/lib/auth/apiGuard";
 export async function POST(request: Request) {
   const guard = await guardApiRoute();
   if ("response" in guard) return guard.response;
+
+  // Defense-in-depth: reject an obviously oversized request before
+  // buffering/parsing the whole multipart body. Not authoritative -- the
+  // real check is file.size below, which this can never replace.
+  if (exceedsDeclaredContentLength(request, MAX_SPREADSHEET_UPLOAD_BYTES)) {
+    return NextResponse.json(
+      { error: `File exceeds the ${MAX_SPREADSHEET_UPLOAD_BYTES / (1024 * 1024)}MB upload limit.` },
+      { status: 413 },
+    );
+  }
 
   let formData: FormData;
   try {

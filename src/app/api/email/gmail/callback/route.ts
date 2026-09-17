@@ -87,9 +87,12 @@ export async function GET(request: NextRequest) {
     );
     clearStateCookie(response);
     return response;
-  } catch (error) {
+  } catch {
+    // Never echo the raw exception here -- it comes from Google's OAuth
+    // token endpoint (via google-auth-library) and can carry provider
+    // implementation detail that has no business in an HTTP response body.
     return errorPage(
-      `Failed to complete the Gmail connection: ${error instanceof Error ? error.message : "unknown error"}.`,
+      "Failed to complete the Gmail connection. The authorization code may have expired or already been used -- retry the connection.",
     );
   }
 }

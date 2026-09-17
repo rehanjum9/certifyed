@@ -142,6 +142,7 @@ export interface Database {
           error_message: string | null;
           email_message_id: string | null;
           emailed_at: string | null;
+          email_attempts: number;
           public_verify_id: string;
           created_at: string;
           updated_at: string;
@@ -157,6 +158,7 @@ export interface Database {
           error_message?: string | null;
           email_message_id?: string | null;
           emailed_at?: string | null;
+          email_attempts?: number;
         };
         Update: Partial<
           Database["public"]["Tables"]["campaign_rows"]["Insert"]
@@ -196,6 +198,10 @@ export interface Database {
     Functions: {
       increment_rate_limit: {
         Args: { p_bucket_key: string; p_window_start: string };
+        Returns: number;
+      };
+      cleanup_rate_limits: {
+        Args: Record<PropertyKey, never>;
         Returns: number;
       };
     };

@@ -11,11 +11,15 @@ const PUBLIC_PATHS = new Set(["/login"]);
  *
  * API routes are intentionally NOT redirected here -- they enforce their
  * own 401 via guardApiRoute (src/lib/auth/apiGuard.ts), which returns JSON
- * instead of an HTML redirect. This middleware still refreshes their
- * session cookie, which is harmless and keeps sessions alive for API calls
- * made from the browser.
+ * instead of an HTML redirect. This proxy still refreshes their session
+ * cookie, which is harmless and keeps sessions alive for API calls made
+ * from the browser.
+ *
+ * Named `proxy` (not `middleware`) per Next.js 16's renamed file
+ * convention -- same file location and `config.matcher`, same behavior,
+ * only the export name changed. See the P1 security report.
  */
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(

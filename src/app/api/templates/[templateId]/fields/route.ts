@@ -3,6 +3,7 @@ import { getTemplate } from "@/lib/templates";
 import { saveTemplateFields } from "@/lib/templateFields";
 import { saveFieldsBodySchema, formatValidationIssue } from "@/lib/validation/templateField";
 import { guardApiRoute } from "@/lib/auth/apiGuard";
+import { safeApiErrorMessage } from "@/lib/apiError";
 
 export async function PUT(
   request: Request,
@@ -41,7 +42,7 @@ export async function PUT(
     return NextResponse.json({ fields });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to save fields." },
+      { error: safeApiErrorMessage(error, "Failed to save fields. Please try again.") },
       { status: 500 },
     );
   }

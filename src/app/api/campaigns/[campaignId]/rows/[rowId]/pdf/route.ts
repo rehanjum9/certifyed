@@ -31,7 +31,7 @@ export async function GET(
   const { data, error } = await supabase.storage.from(STORAGE_BUCKETS.outputs).download(row.pdf_path);
 
   if (error || !data) {
-    return NextResponse.json({ error: `Failed to load PDF: ${error?.message ?? "not found"}` }, { status: 500 });
+    return NextResponse.json({ error: "Failed to load the certificate file. Please try again." }, { status: 500 });
   }
 
   const rowData = (row.data ?? {}) as Record<string, string>;

@@ -7,6 +7,7 @@ import {
   DEFAULT_EMAIL_BATCH_SIZE,
   MIN_EMAIL_BATCH_SIZE,
   MAX_EMAIL_BATCH_SIZE,
+  MAX_EMAIL_ATTEMPTS,
   type EmailCandidateRow,
 } from "./emailDelivery";
 
@@ -39,7 +40,13 @@ describe("clampEmailBatchSize", () => {
 
 describe("isEligibleForEmailSend", () => {
   function row(overrides: Partial<EmailCandidateRow>): EmailCandidateRow {
-    return { status: "generated", pdfPath: "campaigns/c1/r1.pdf", recipientEmail: "a@example.com", ...overrides };
+    return {
+      status: "generated",
+      pdfPath: "campaigns/c1/r1.pdf",
+      recipientEmail: "a@example.com",
+      emailAttempts: 0,
+      ...overrides,
+    };
   }
 
   it("a generated row with a PDF and a recipient email is eligible", () => {
@@ -69,7 +76,13 @@ describe("isEligibleForEmailSend", () => {
 
 describe("isEligibleForEmailRetry", () => {
   function row(overrides: Partial<EmailCandidateRow>): EmailCandidateRow {
-    return { status: "failed", pdfPath: "campaigns/c1/r1.pdf", recipientEmail: "a@example.com", ...overrides };
+    return {
+      status: "failed",
+      pdfPath: "campaigns/c1/r1.pdf",
+      recipientEmail: "a@example.com",
+      emailAttempts: 1,
+      ...overrides,
+    };
   }
 
   it("a failed row that already has a PDF is retriable -- an email failure, not a generation failure", () => {
@@ -87,11 +100,23 @@ describe("isEligibleForEmailRetry", () => {
   it("a row missing a recipient email is not retriable", () => {
     expect(isEligibleForEmailRetry(row({ recipientEmail: null }))).toBe(false);
   });
+
+  it("a row just under the attempt cap is still retriable", () => {
+    expect(isEligibleForEmailRetry(row({ emailAttempts: MAX_EMAIL_ATTEMPTS - 1 }))).toBe(true);
+  });
+
+  it("a row that has reached the attempt cap is no longer retriable", () => {
+    expect(isEligibleForEmailRetry(row({ emailAttempts: MAX_EMAIL_ATTEMPTS }))).toBe(false);
+  });
+
+  it("a row that has exceeded the attempt cap is no longer retriable", () => {
+    expect(isEligibleForEmailRetry(row({ emailAttempts: MAX_EMAIL_ATTEMPTS + 3 }))).toBe(false);
+  });
 });
 
 describe("summarizeEmailProgress", () => {
   function row(overrides: Partial<EmailCandidateRow>): EmailCandidateRow {
-    return { status: "generated", pdfPath: "p.pdf", recipientEmail: "a@example.com", ...overrides };
+    return { status: "generated", pdfPath: "p.pdf", recipientEmail: "a@example.com", emailAttempts: 0, ...overrides };
   }
 
   it("excludes rows that have never been generated (no pdf_path) from the email universe entirely", () => {

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { retryFailedEmails } from "@/lib/campaigns/emailDelivery";
 import { guardApiRoute } from "@/lib/auth/apiGuard";
 import { RATE_LIMITS } from "@/lib/rateLimit";
+import { safeApiErrorMessage } from "@/lib/apiError";
 
 /**
  * Re-queues rows whose *email* delivery failed (see lib/campaigns/
@@ -23,7 +24,7 @@ export async function POST(
     return NextResponse.json(result);
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to retry failed emails." },
+      { error: safeApiErrorMessage(error, "Failed to retry failed emails. Please try again.") },
       { status: 500 },
     );
   }

@@ -1,5 +1,5 @@
 import * as XLSX from "xlsx";
-import { MAX_SPREADSHEET_ROWS } from "./constants";
+import { MAX_SPREADSHEET_ROWS, MAX_SPREADSHEET_COLUMNS } from "./constants";
 
 export interface ParsedSpreadsheet {
   /** Raw header cell text, in column order. May contain blanks/duplicates -- mapping always references column index, never header text. */
@@ -54,6 +54,13 @@ export function parseSpreadsheet(input: { buffer: ArrayBuffer; filename: string 
   const hasUsableHeader = headers.some((h) => h.length > 0);
   if (!hasUsableHeader) {
     return { ok: false, error: "The spreadsheet has no usable header row." };
+  }
+
+  if (headers.length > MAX_SPREADSHEET_COLUMNS) {
+    return {
+      ok: false,
+      error: `The spreadsheet has ${headers.length} columns, which exceeds the limit of ${MAX_SPREADSHEET_COLUMNS}.`,
+    };
   }
 
   let dataRows: string[][] = raw

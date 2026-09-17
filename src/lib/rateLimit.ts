@@ -39,6 +39,21 @@ export function isWithinLimit(count: number, limit: number): boolean {
 }
 
 /**
+ * rate_limits accumulates one row per bucket forever with no cleanup (see
+ * supabase/migrations/0005_rate_limit_cleanup.sql). Rather than delete old
+ * buckets on every request (expensive, and pointless -- most requests don't
+ * need to), a small fraction of calls opportunistically trigger a cleanup
+ * of buckets old enough that they can never be relevant again. Split out as
+ * a pure function, keyed on a caller-supplied random draw, so the trigger
+ * rate is unit-testable without actually being random in the test.
+ */
+export const RATE_LIMIT_CLEANUP_PROBABILITY = 0.01;
+
+export function shouldOpportunisticallyCleanupRateLimits(random: number): boolean {
+  return random < RATE_LIMIT_CLEANUP_PROBABILITY;
+}
+
+/**
  * Fixed-window rate limiting backed by Postgres (via the existing Supabase
  * project) -- deliberately not in-memory, since in-memory counters don't
  * work correctly across multiple serverless function instances. The bucket
@@ -68,6 +83,17 @@ export async function checkRateLimit(key: string, limit: number, windowSeconds: 
 
   if (error) {
     return { allowed: true, retryAfterSeconds: 0 };
+  }
+
+  if (shouldOpportunisticallyCleanupRateLimits(Math.random())) {
+    // Best-effort background hygiene -- never affects this call's own
+    // allowed/blocked result, and a failure here is silently ignored (same
+    // fail-open philosophy as the RPC call above).
+    try {
+      await supabase.rpc("cleanup_rate_limits");
+    } catch {
+      // Ignored -- see comment above.
+    }
   }
 
   const count = typeof data === "number" ? data : 0;

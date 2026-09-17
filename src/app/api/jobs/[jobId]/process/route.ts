@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { processJob } from "@/lib/jobs/processJob";
 import { guardApiRoute } from "@/lib/auth/apiGuard";
 import { RATE_LIMITS } from "@/lib/rateLimit";
+import { safeApiErrorMessage } from "@/lib/apiError";
 
 /**
  * Trigger-independent worker endpoint: processes exactly one bounded
@@ -15,7 +16,17 @@ import { RATE_LIMITS } from "@/lib/rateLimit";
  * browser polling loop; later it could be Vercel Cron, another scheduler,
  * or a separate worker service hitting the same URL -- the processing
  * logic doesn't change either way.
+ *
+ * maxDuration: one call processes at most one bounded batch -- up to
+ * MAX_BATCH_SIZE (20) certificate generations or MAX_EMAIL_BATCH_SIZE (10)
+ * email sends (lib/campaigns/generation.ts / emailDelivery.ts). 60s gives
+ * comfortable headroom for either (PDF rendering is typically well under a
+ * second per row; email sends include a provider API round-trip) while
+ * staying within Vercel's default Hobby-plan function limit, so this route
+ * "just works" without requiring a paid plan or a longer-running worker.
  */
+export const maxDuration = 60;
+
 export async function POST(_request: Request, { params }: RouteContext<"/api/jobs/[jobId]/process">) {
   const guard = await guardApiRoute({ rateLimit: { key: "job-process", ...RATE_LIMITS.jobProcess } });
   if ("response" in guard) return guard.response;
@@ -27,7 +38,7 @@ export async function POST(_request: Request, { params }: RouteContext<"/api/job
     return NextResponse.json(result);
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to process job." },
+      { error: safeApiErrorMessage(error, "Failed to process job. Please try again.") },
       { status: 500 },
     );
   }

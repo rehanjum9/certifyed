@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import * as XLSX from "xlsx";
 import { parseSpreadsheet } from "./parse";
-import { MAX_SPREADSHEET_ROWS } from "./constants";
+import { MAX_SPREADSHEET_ROWS, MAX_SPREADSHEET_COLUMNS } from "./constants";
 
 function csvBuffer(text: string): ArrayBuffer {
   return new TextEncoder().encode(text).buffer as ArrayBuffer;
@@ -59,6 +59,24 @@ describe("parseSpreadsheet (CSV)", () => {
     const csv = `Name,Email\n${rows.join("\n")}\n`;
     const outcome = parseSpreadsheet({ buffer: csvBuffer(csv), filename: "big.csv" });
     expect(outcome.ok).toBe(false);
+  });
+
+  it("rejects a spreadsheet exceeding the column limit", () => {
+    const headerCells = Array.from({ length: MAX_SPREADSHEET_COLUMNS + 1 }, (_, i) => `Col${i}`);
+    const dataCells = headerCells.map((_, i) => `v${i}`);
+    const csv = `${headerCells.join(",")}\n${dataCells.join(",")}\n`;
+    const outcome = parseSpreadsheet({ buffer: csvBuffer(csv), filename: "wide.csv" });
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    expect(outcome.error).toContain(String(MAX_SPREADSHEET_COLUMNS));
+  });
+
+  it("accepts a spreadsheet exactly at the column limit", () => {
+    const headerCells = Array.from({ length: MAX_SPREADSHEET_COLUMNS }, (_, i) => `Col${i}`);
+    const dataCells = headerCells.map((_, i) => `v${i}`);
+    const csv = `${headerCells.join(",")}\n${dataCells.join(",")}\n`;
+    const outcome = parseSpreadsheet({ buffer: csvBuffer(csv), filename: "wide.csv" });
+    expect(outcome.ok).toBe(true);
   });
 
   it("pads ragged rows to the header width", () => {

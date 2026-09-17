@@ -32,16 +32,27 @@ export interface EmailCandidateRow {
   status: CampaignRowStatus;
   pdfPath: string | null;
   recipientEmail: string | null;
+  emailAttempts: number;
 }
+
+/**
+ * P1 hardening: caps how many real send attempts one row gets before it's
+ * excluded from retry entirely. Without this, a permanently-failing address
+ * (hard bounce, provider always rejecting it) could be retried forever,
+ * burning provider quota and repeatedly hitting the same recipient. Each
+ * real send attempt (success or failure) increments campaign_rows.email_attempts
+ * -- see sendCertificateEmailsBatch.
+ */
+export const MAX_EMAIL_ATTEMPTS = 5;
 
 /** Ready for a first email attempt: generated, has a PDF, has a recipient address. */
 export function isEligibleForEmailSend(row: EmailCandidateRow): boolean {
   return row.status === "generated" && row.pdfPath != null && !!row.recipientEmail;
 }
 
-/** Retriable after an email failure specifically (not a generation failure) -- see module doc comment above. */
+/** Retriable after an email failure specifically (not a generation failure), and only while attempts remain -- see module doc comment above. */
 export function isEligibleForEmailRetry(row: EmailCandidateRow): boolean {
-  return row.status === "failed" && row.pdfPath != null && !!row.recipientEmail;
+  return row.status === "failed" && row.pdfPath != null && !!row.recipientEmail && row.emailAttempts < MAX_EMAIL_ATTEMPTS;
 }
 
 export const DEFAULT_EMAIL_BATCH_SIZE = 5;
@@ -104,7 +115,7 @@ export async function computeEmailProgress(campaignId: string): Promise<EmailPro
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase
     .from("campaign_rows")
-    .select("status, pdf_path, recipient_email")
+    .select("status, pdf_path, recipient_email, email_attempts")
     .eq("campaign_id", campaignId);
 
   if (error) throw new Error(`Failed to load campaign rows: ${error.message}`);
@@ -114,6 +125,7 @@ export async function computeEmailProgress(campaignId: string): Promise<EmailPro
       status: row.status,
       pdfPath: row.pdf_path,
       recipientEmail: row.recipient_email,
+      emailAttempts: row.email_attempts,
     })),
   );
 }
@@ -237,16 +249,27 @@ export async function sendCertificateEmailsBatch(campaignId: string, requestedBa
           email_message_id: result.messageId,
           emailed_at: new Date().toISOString(),
           error_message: null,
+          email_attempts: row.email_attempts + 1,
         })
         .eq("id", row.id);
       sent += 1;
     } catch (error) {
       failed += 1;
+      // Counts toward MAX_EMAIL_ATTEMPTS regardless of which step failed
+      // (provider rejection, PDF download hiccup, etc.) -- otherwise a row
+      // could dodge the cap forever by always failing before the actual
+      // provider call. See isEligibleForEmailRetry / retryFailedEmails.
+      const attempts = row.email_attempts + 1;
+      const exhausted = attempts >= MAX_EMAIL_ATTEMPTS;
+      const reason = error instanceof Error ? error.message : String(error);
       await supabase
         .from("campaign_rows")
         .update({
           status: "failed",
-          error_message: `Email delivery failed: ${error instanceof Error ? error.message : String(error)}`,
+          email_attempts: attempts,
+          error_message: exhausted
+            ? `Email delivery failed: ${reason} (attempt ${attempts}/${MAX_EMAIL_ATTEMPTS} -- maximum retries reached; this row will not be retried automatically).`
+            : `Email delivery failed: ${reason} (attempt ${attempts}/${MAX_EMAIL_ATTEMPTS}).`,
         })
         .eq("id", row.id);
     }
@@ -257,7 +280,10 @@ export async function sendCertificateEmailsBatch(campaignId: string, requestedBa
 
 export interface RetryFailedEmailsResult {
   requeued: number;
+  /** Failed at generation (no pdf_path), or missing a recipient email -- never a candidate for this retry path. */
   notRetriable: number;
+  /** Failed at email delivery specifically, but already hit MAX_EMAIL_ATTEMPTS -- a clear, distinct reason from notRetriable. */
+  attemptsExhausted: number;
 }
 
 /**
@@ -266,7 +292,8 @@ export interface RetryFailedEmailsResult {
  * the next email batch picks them up. Rows that are "failed" because
  * generation itself never produced a PDF are left untouched here --
  * lib/campaigns/generation.ts's retryFailedRows is the correct retry path
- * for those.
+ * for those. Rows that already hit MAX_EMAIL_ATTEMPTS are also left
+ * untouched -- see isEligibleForEmailRetry.
  */
 export async function retryFailedEmails(campaignId: string): Promise<RetryFailedEmailsResult> {
   const supabase = createServiceRoleClient();
@@ -274,20 +301,28 @@ export async function retryFailedEmails(campaignId: string): Promise<RetryFailed
 
   const { data: failedRows, error } = await supabase
     .from("campaign_rows")
-    .select("id, pdf_path, recipient_email")
+    .select("id, pdf_path, recipient_email, email_attempts")
     .eq("campaign_id", campaignId)
     .eq("status", "failed");
 
   if (error) throw new Error(`Failed to load failed rows: ${error.message}`);
   if (!failedRows || failedRows.length === 0) {
-    return { requeued: 0, notRetriable: 0 };
+    return { requeued: 0, notRetriable: 0, attemptsExhausted: 0 };
   }
 
-  const retriableIds = failedRows
-    .filter((row) =>
-      isEligibleForEmailRetry({ status: "failed", pdfPath: row.pdf_path, recipientEmail: row.recipient_email }),
-    )
-    .map((row) => row.id);
+  const candidateRows = failedRows.map((row) => ({
+    id: row.id,
+    status: "failed" as const,
+    pdfPath: row.pdf_path,
+    recipientEmail: row.recipient_email,
+    emailAttempts: row.email_attempts,
+  }));
+
+  const retriableIds = candidateRows.filter(isEligibleForEmailRetry).map((row) => row.id);
+
+  const attemptsExhausted = candidateRows.filter(
+    (row) => row.pdfPath != null && !!row.recipientEmail && row.emailAttempts >= MAX_EMAIL_ATTEMPTS,
+  ).length;
 
   if (retriableIds.length > 0) {
     const { error: updateError } = await supabase
@@ -297,7 +332,11 @@ export async function retryFailedEmails(campaignId: string): Promise<RetryFailed
     if (updateError) throw new Error(`Failed to requeue rows for email retry: ${updateError.message}`);
   }
 
-  return { requeued: retriableIds.length, notRetriable: failedRows.length - retriableIds.length };
+  return {
+    requeued: retriableIds.length,
+    notRetriable: failedRows.length - retriableIds.length - attemptsExhausted,
+    attemptsExhausted,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -326,22 +365,23 @@ export interface ProcessEmailJobResult {
 export async function processEmailJob(jobId: string, requestedBatchSize?: number): Promise<ProcessEmailJobResult> {
   const supabase = createServiceRoleClient();
 
-  const claimedJob = await claimJob(jobId);
+  const claimResult = await claimJob(jobId);
+  if (!claimResult) throw new Error("Job not found.");
 
-  if (!claimedJob) {
-    const { data: existing, error } = await supabase.from("jobs").select("*").eq("id", jobId).maybeSingle();
-    if (error) throw new Error(`Failed to load job: ${error.message}`);
-    if (!existing) throw new Error("Job not found.");
-
-    const progress = await computeEmailProgress(existing.campaign_id);
+  if (!claimResult.claimed) {
+    // Someone else holds the lock -- report status from the row claimJob
+    // already read rather than issuing a second, identical SELECT.
+    const progress = await computeEmailProgress(claimResult.job.campaign_id);
     return {
       claimed: false,
-      job: toJobInfo(existing),
-      campaignId: existing.campaign_id,
+      job: toJobInfo(claimResult.job),
+      campaignId: claimResult.job.campaign_id,
       batch: null,
       progress,
     };
   }
+
+  const claimedJob = claimResult.job;
 
   try {
     await recoverStaleEmailingRows(claimedJob.campaign_id);

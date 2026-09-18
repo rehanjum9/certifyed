@@ -49,6 +49,39 @@ export async function downloadCustomFontFile(storagePath: string): Promise<Buffe
   return Buffer.from(await data.arrayBuffer());
 }
 
+export interface LoadedCustomFont {
+  id: string;
+  buffer: Buffer;
+}
+
+/**
+ * Downloads the font bytes for a set of distinct custom font ids (deduped
+ * here), for the PDF renderer's doc.registerFont() step -- see
+ * pdf/renderers/pdfkitSvgRenderer.ts. A referenced font that no longer
+ * exists, or whose file fails to download, is silently skipped: the
+ * renderer falls back to the default built-in font and reports a warning
+ * for that overlay rather than failing the whole generation batch over one
+ * broken font reference.
+ */
+export async function loadCustomFontsForFields(fontIds: string[]): Promise<LoadedCustomFont[]> {
+  const uniqueIds = Array.from(new Set(fontIds));
+
+  const loaded = await Promise.all(
+    uniqueIds.map(async (id): Promise<LoadedCustomFont | null> => {
+      try {
+        const font = await getCustomFont(id);
+        if (!font) return null;
+        const buffer = await downloadCustomFontFile(font.storage_path);
+        return { id, buffer };
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  return loaded.filter((font): font is LoadedCustomFont => font !== null);
+}
+
 export interface CreateCustomFontInput {
   displayName: string;
   originalFilename: string;

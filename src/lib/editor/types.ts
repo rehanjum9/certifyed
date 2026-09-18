@@ -1,4 +1,4 @@
-import { DEFAULT_FONT_NAME } from "@/lib/fonts";
+import { DEFAULT_FONT_ID } from "@/lib/fonts";
 import type { TemplateFieldRow } from "@/lib/templateFields";
 import type { SizingMode } from "@/lib/pdf/textLayout";
 
@@ -139,7 +139,7 @@ export function createDefaultField(
     y: (canvas.svg_height - DEFAULT_FIELD_HEIGHT) / 2 + index * 12,
     width: DEFAULT_FIELD_WIDTH,
     height: DEFAULT_FIELD_HEIGHT,
-    font_family: DEFAULT_FONT_NAME,
+    font_family: DEFAULT_FONT_ID,
     font_size: 24,
     font_weight: "normal",
     font_color: "#111827",

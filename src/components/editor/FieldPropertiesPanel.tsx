@@ -1,9 +1,10 @@
 "use client";
 
 import { FIELD_KEY_PATTERN, RESERVED_FIELD_KEYS } from "@/lib/validation/templateField";
-import { FONT_OPTIONS } from "@/lib/fonts";
+import type { CustomFontMeta } from "@/lib/fonts";
 import { Label, Input, inputClassName } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { FontPicker } from "./FontPicker";
 import { cn } from "@/lib/cn";
 import { applySizingModeChange, type EditorField, type SizingMode, type TextAlign } from "@/lib/editor/types";
 
@@ -14,8 +15,11 @@ interface FieldPropertiesPanelProps {
   canvasWidth: number;
   canvasHeight: number;
   overflowing: boolean;
+  customFonts: CustomFontMeta[];
+  loadingCustomFonts: boolean;
   onChangeField: (patch: Partial<EditorField>) => void;
   onChangePreviewValue: (value: string) => void;
+  onCustomFontsChanged: () => Promise<void>;
 }
 
 function fieldKeyError(key: string, otherKeys: string[]): string | null {
@@ -58,8 +62,11 @@ export function FieldPropertiesPanel({
   canvasWidth,
   canvasHeight,
   overflowing,
+  customFonts,
+  loadingCustomFonts,
   onChangeField,
   onChangePreviewValue,
+  onCustomFontsChanged,
 }: FieldPropertiesPanelProps) {
   if (!field) {
     return (
@@ -187,18 +194,13 @@ export function FieldPropertiesPanel({
 
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="field-font-family">Font family</Label>
-            <select
-              id="field-font-family"
+            <FontPicker
               value={field.font_family}
-              onChange={(e) => onChangeField({ font_family: e.target.value })}
-              className={inputClassName}
-            >
-              {FONT_OPTIONS.map((font) => (
-                <option key={font.name} value={font.name}>
-                  {font.label}
-                </option>
-              ))}
-            </select>
+              customFonts={customFonts}
+              loadingCustomFonts={loadingCustomFonts}
+              onChange={(font_family) => onChangeField({ font_family })}
+              onFontsChanged={onCustomFontsChanged}
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-3">

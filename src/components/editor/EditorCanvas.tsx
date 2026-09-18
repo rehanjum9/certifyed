@@ -3,6 +3,7 @@
 import { forwardRef } from "react";
 import { FieldOverlay } from "./FieldOverlay";
 import type { EditorField } from "@/lib/editor/types";
+import type { CustomFontMeta } from "@/lib/fonts";
 
 interface EditorCanvasProps {
   svg: string;
@@ -12,6 +13,7 @@ interface EditorCanvasProps {
   fields: EditorField[];
   selectedFieldId: string | null;
   previewValues: Record<string, string>;
+  customFonts: CustomFontMeta[];
   onSelectField: (id: string | null) => void;
   onUpdateField: (id: string, patch: Partial<EditorField>) => void;
   onDeleteField: (id: string) => void;
@@ -33,6 +35,7 @@ export const EditorCanvas = forwardRef<HTMLDivElement, EditorCanvasProps>(functi
     fields,
     selectedFieldId,
     previewValues,
+    customFonts,
     onSelectField,
     onUpdateField,
     onDeleteField,
@@ -71,6 +74,7 @@ export const EditorCanvas = forwardRef<HTMLDivElement, EditorCanvasProps>(functi
               previewText={previewValues[field.field_key] ?? ""}
               canvasWidth={svgWidth}
               canvasHeight={svgHeight}
+              customFonts={customFonts}
               onSelect={() => onSelectField(field.id)}
               onChange={(patch) => onUpdateField(field.id, patch)}
               onDelete={() => onDeleteField(field.id)}

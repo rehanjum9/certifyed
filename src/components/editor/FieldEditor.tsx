@@ -8,6 +8,7 @@ import { EditorCanvas } from "./EditorCanvas";
 import { ZoomControls } from "./ZoomControls";
 import { computeFitToScreenScale } from "@/lib/editor/coordinates";
 import { computeFieldTextStyle } from "@/lib/editor/fieldTextStyle";
+import { useLoadCustomFonts } from "@/lib/fonts/useLoadCustomFonts";
 import {
   createDefaultField,
   defaultPreviewValueFor,
@@ -49,6 +50,7 @@ export function FieldEditor({ template, svg, initialFields }: FieldEditorProps) 
   const [dirty, setDirty] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
+  const { customFonts, loading: loadingCustomFonts, refresh: refreshCustomFonts } = useLoadCustomFonts();
 
   const canvasWrapperRef = useRef<HTMLDivElement>(null);
   const scale = zoomPercent / 100;
@@ -119,8 +121,8 @@ export function FieldEditor({ template, svg, initialFields }: FieldEditorProps) 
   const selectedFieldOverflowing = useMemo(() => {
     if (!selectedField) return false;
     const preview = previewValues[selectedField.field_key] ?? "";
-    return computeFieldTextStyle(selectedField, preview, 1, template.svg_width).overflowing;
-  }, [selectedField, previewValues, template.svg_width]);
+    return computeFieldTextStyle(selectedField, preview, 1, template.svg_width, customFonts).overflowing;
+  }, [selectedField, previewValues, template.svg_width, customFonts]);
 
   async function handleSave() {
     const inputs = fields.map(editorFieldToInput);
@@ -213,6 +215,7 @@ export function FieldEditor({ template, svg, initialFields }: FieldEditorProps) 
             fields={fields}
             selectedFieldId={selectedFieldId}
             previewValues={previewValues}
+            customFonts={customFonts}
             onSelectField={setSelectedFieldId}
             onUpdateField={updateField}
             onDeleteField={deleteField}
@@ -227,11 +230,14 @@ export function FieldEditor({ template, svg, initialFields }: FieldEditorProps) 
             canvasWidth={template.svg_width}
             canvasHeight={template.svg_height}
             overflowing={selectedFieldOverflowing}
+            customFonts={customFonts}
+            loadingCustomFonts={loadingCustomFonts}
             onChangeField={(patch) => selectedField && updateField(selectedField.id, patch)}
             onChangePreviewValue={(value) =>
               selectedField &&
               setPreviewValues((prev) => ({ ...prev, [selectedField.field_key]: value }))
             }
+            onCustomFontsChanged={refreshCustomFonts}
           />
         </div>
       </div>

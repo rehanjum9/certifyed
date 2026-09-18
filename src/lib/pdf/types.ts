@@ -28,6 +28,8 @@ export interface PdfRenderInput {
   width: number;
   height: number;
   overlays: TextOverlay[];
+  /** Custom font bytes for every custom font id this batch's overlays may reference, pre-downloaded by the caller (see lib/fonts/customFonts.ts#loadCustomFontsForFields) -- renderers never fetch Storage themselves. */
+  customFonts?: { id: string; buffer: Buffer }[];
 }
 
 export interface PdfRenderResult {

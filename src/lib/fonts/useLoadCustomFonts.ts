@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { CustomFontMeta } from "./types";
 import { customFontFaceFamily, customFontFileUrl } from "./registry";
 
@@ -36,9 +36,22 @@ async function registerFontFace(font: CustomFontMeta): Promise<void> {
   }
 }
 
+/** Shared by the initial load and `refresh()` -- `force` bypasses the module-level cache/in-flight fetch so a just-uploaded or just-deleted font is reflected immediately instead of waiting for the next natural remount. */
+async function loadAndRegister(force: boolean): Promise<CustomFontMeta[]> {
+  if (force || !inFlightFetch) {
+    inFlightFetch = fetchCustomFonts();
+  }
+  const fonts = await inFlightFetch;
+  cachedFonts = fonts;
+  await Promise.all(fonts.map(registerFontFace));
+  return fonts;
+}
+
 export interface UseCustomFontsResult {
   customFonts: CustomFontMeta[];
   loading: boolean;
+  /** Re-fetches the font list and registers any newly-added FontFaces -- called after an upload or delete so the caller's own font picker/canvas update without a full page reload. */
+  refresh: () => Promise<void>;
 }
 
 /**
@@ -56,24 +69,24 @@ export function useLoadCustomFonts(): UseCustomFontsResult {
   useEffect(() => {
     let cancelled = false;
 
-    async function load() {
-      if (!inFlightFetch) {
-        inFlightFetch = fetchCustomFonts();
-      }
-      const fonts = await inFlightFetch;
-      cachedFonts = fonts;
-      await Promise.all(fonts.map(registerFontFace));
+    loadAndRegister(false).then((fonts) => {
       if (!cancelled) {
         setCustomFonts(fonts);
         setLoading(false);
       }
-    }
+    });
 
-    load();
     return () => {
       cancelled = true;
     };
   }, []);
 
-  return { customFonts, loading };
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    const fonts = await loadAndRegister(true);
+    setCustomFonts(fonts);
+    setLoading(false);
+  }, []);
+
+  return { customFonts, loading, refresh };
 }

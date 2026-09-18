@@ -11,6 +11,7 @@ import {
   type ResizeHandle,
 } from "@/lib/editor/coordinates";
 import type { EditorField } from "@/lib/editor/types";
+import type { CustomFontMeta } from "@/lib/fonts";
 import { IconClose } from "@/components/ui/icons";
 
 const HANDLES: ResizeHandle[] = ["nw", "ne", "sw", "se"];
@@ -29,6 +30,7 @@ interface FieldOverlayProps {
   previewText: string;
   canvasWidth: number;
   canvasHeight: number;
+  customFonts: CustomFontMeta[];
   onSelect: () => void;
   onChange: (patch: Partial<EditorField>) => void;
   onDelete: () => void;
@@ -41,13 +43,14 @@ export function FieldOverlay({
   previewText,
   canvasWidth,
   canvasHeight,
+  customFonts,
   onSelect,
   onChange,
   onDelete,
 }: FieldOverlayProps) {
   const { box, style: textStyle, overflowing } = useMemo(
-    () => computeFieldTextStyle(field, previewText, scale, canvasWidth),
-    [field, previewText, scale, canvasWidth],
+    () => computeFieldTextStyle(field, previewText, scale, canvasWidth, customFonts),
+    [field, previewText, scale, canvasWidth, customFonts],
   );
 
   function handleDragPointerDown(event: React.PointerEvent) {

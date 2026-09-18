@@ -5,6 +5,8 @@ import { getPdfRenderer } from "@/lib/pdf";
 import { buildProductionOverlays } from "@/lib/pdf/productionOverlays";
 import { resolvePdfPageSize } from "@/lib/pdf/pageSize";
 import { STORAGE_BUCKETS } from "@/lib/supabase/storage";
+import { isBuiltInFontId } from "@/lib/fonts";
+import { loadCustomFontsForFields } from "@/lib/fonts/customFonts";
 import { computeCampaignEligibility, type CampaignRowForEligibility } from "./eligibility";
 import type { Database } from "@/types/database";
 import type { TemplateFieldRow } from "@/lib/templateFields";
@@ -139,6 +141,12 @@ export async function generateCertificatesBatch(
   const renderer = getPdfRenderer();
   const pageSize = resolvePdfPageSize(template.svg_width, template.svg_height);
 
+  // Downloaded once per batch (not per row): every field's custom font
+  // (if any) is the same across every row in the campaign, so this is
+  // shared across the whole loop below rather than re-fetched per PDF.
+  const customFontIds = fields.map((f) => f.font_family).filter((id) => !isBuiltInFontId(id));
+  const customFonts = customFontIds.length > 0 ? await loadCustomFontsForFields(customFontIds) : [];
+
   // Campaign-wide, not per-row: duplicate email/serial_number can only be
   // decided by looking at every row together (see lib/campaigns/eligibility.ts).
   const allRows = await fetchAllRowsForEligibility(campaignId);
@@ -170,6 +178,7 @@ export async function generateCertificatesBatch(
         width: pageSize.widthPt,
         height: pageSize.heightPt,
         overlays,
+        customFonts,
       });
 
       const pdfPath = `campaigns/${campaignId}/${row.id}.pdf`;

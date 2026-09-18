@@ -1,19 +1,85 @@
 import PDFDocument from "pdfkit";
 import SVGtoPDF from "svg-to-pdfkit";
 import { resolveFieldLayout } from "../textLayout";
-import { resolvePdfFontName } from "./resolvePdfFont";
+import { resolvePdfFontName, resolveOverlayFontName } from "./resolvePdfFont";
 import { SVG_UNITS_ASSUMED_AS_POINTS } from "../pageSize";
 import type { PdfRenderer, PdfRenderInput, PdfRenderResult, TextOverlay } from "../types";
 
 // PDFKit's built-in standard-14 font: zero external files, no license risk,
 // and its WinAnsi-derived encoding covers accented Latin characters (é, ë).
-// It is NOT embedded in the PDF (viewers substitute their own copy) -- fine
-// for this experimental overlay, but real typography needs an embedded
-// .ttf/.otf before production.
+// It is NOT embedded in the PDF (viewers substitute their own copy) -- the
+// fallback for overlays with no font_family and for a custom font that
+// couldn't be loaded. A real embedded custom .ttf/.otf is registered per
+// request below (see registerCustomFonts) and used directly when available.
 const OVERLAY_FONT = "Helvetica";
 
-function drawOverlay(doc: PDFKit.PDFDocument, overlay: TextOverlay, warnings: string[]): void {
-  const font = resolvePdfFontName(overlay.fontFamily ?? OVERLAY_FONT, overlay.fontWeight ?? "normal");
+/**
+ * Registers every custom font this render call was handed (already
+ * downloaded server-side by the caller -- see
+ * lib/fonts/customFonts.ts#loadCustomFontsForFields) under its own font id,
+ * so drawOverlay can call doc.font(fontId) directly. A font whose bytes
+ * PDFKit/fontkit can't parse is skipped with a warning rather than failing
+ * the whole render.
+ */
+function registerCustomFonts(
+  doc: PDFKit.PDFDocument,
+  customFonts: { id: string; buffer: Buffer }[],
+  warnings: string[],
+): Set<string> {
+  const registered = new Set<string>();
+
+  for (const font of customFonts) {
+    try {
+      doc.registerFont(font.id, font.buffer);
+      registered.add(font.id);
+    } catch (error) {
+      warnings.push(
+        `Custom font "${font.id}" could not be loaded and was skipped: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
+  return registered;
+}
+
+function drawOverlay(
+  doc: PDFKit.PDFDocument,
+  overlay: TextOverlay,
+  warnings: string[],
+  registeredCustomFontIds: ReadonlySet<string>,
+): void {
+  const resolved = resolveOverlayFontName(
+    overlay.fontFamily ?? OVERLAY_FONT,
+    overlay.fontWeight ?? "normal",
+    registeredCustomFontIds,
+    OVERLAY_FONT,
+  );
+  let font = resolved.fontName;
+
+  if (resolved.usedFallback) {
+    warnings.push(
+      `Overlay "${overlay.text}" requested an unavailable font ("${overlay.fontFamily}") and used the default font instead.`,
+    );
+  } else {
+    // doc.registerFont() only stores a (name, buffer) pair -- it never
+    // parses the font, so bytes that aren't actually a valid TTF/OTF only
+    // throw once PDFKit/fontkit first tries to use them, right here. Caught
+    // per-overlay (not left to the render loop's outer catch) so a single
+    // corrupt custom font degrades to the default font for that overlay
+    // instead of dropping the overlay's text entirely.
+    try {
+      doc.font(font);
+    } catch (error) {
+      warnings.push(
+        `Overlay "${overlay.text}" requested a font ("${overlay.fontFamily}") that failed to load (${
+          error instanceof Error ? error.message : String(error)
+        }) and used the default font instead.`,
+      );
+      font = resolvePdfFontName(OVERLAY_FONT, overlay.fontWeight ?? "normal");
+    }
+  }
 
   // Real font metrics, not a guess -- this is what makes the vertical
   // centering below match a browser's flexbox `align-items: center`
@@ -75,7 +141,7 @@ function drawOverlay(doc: PDFKit.PDFDocument, overlay: TextOverlay, warnings: st
 export const pdfkitSvgRenderer: PdfRenderer = {
   name: "pdfkit+svg-to-pdfkit",
 
-  async render({ svg, width, height, overlays }: PdfRenderInput): Promise<PdfRenderResult> {
+  async render({ svg, width, height, overlays, customFonts = [] }: PdfRenderInput): Promise<PdfRenderResult> {
     const warnings: string[] = [];
 
     const doc = new PDFDocument({ size: [width, height], margin: 0 });
@@ -86,6 +152,8 @@ export const pdfkitSvgRenderer: PdfRenderer = {
       doc.on("end", () => resolve());
       doc.on("error", (error: Error) => reject(error));
     });
+
+    const registeredCustomFontIds = registerCustomFonts(doc, customFonts, warnings);
 
     // Deliberately NOT wrapped in try/catch: a background SVG that fails to
     // draw is a real fidelity-test failure, not something to paper over by
@@ -102,7 +170,7 @@ export const pdfkitSvgRenderer: PdfRenderer = {
 
     for (const overlay of overlays) {
       try {
-        drawOverlay(doc, overlay, warnings);
+        drawOverlay(doc, overlay, warnings, registeredCustomFontIds);
       } catch (error) {
         warnings.push(
           `Overlay "${overlay.text}" failed to draw: ${

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { computeFitToScreenScale } from "@/lib/editor/coordinates";
 import { computeFieldTextStyle } from "@/lib/editor/fieldTextStyle";
+import { useLoadCustomFonts } from "@/lib/fonts/useLoadCustomFonts";
 import { cn } from "@/lib/cn";
 import type { EditorField } from "@/lib/editor/types";
 
@@ -24,6 +25,7 @@ interface RecipientCanvasProps {
 export function RecipientCanvas({ svg, svgWidth, svgHeight, fields, values }: RecipientCanvasProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
+  const { customFonts } = useLoadCustomFonts();
 
   useEffect(() => {
     function recompute() {
@@ -51,7 +53,7 @@ export function RecipientCanvas({ svg, svgWidth, svgHeight, fields, values }: Re
         <div className="absolute inset-0">
           {fields.map((field) => {
             const text = values[field.field_key] ?? "";
-            const { box, style, overflowing } = computeFieldTextStyle(field, text, scale, svgWidth);
+            const { box, style, overflowing } = computeFieldTextStyle(field, text, scale, svgWidth, customFonts);
 
             return (
               <div

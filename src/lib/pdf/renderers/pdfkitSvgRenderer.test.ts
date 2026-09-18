@@ -1,6 +1,15 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { pdfkitSvgRenderer } from "./pdfkitSvgRenderer";
 import type { TextOverlay } from "../types";
+
+// A real, small TTF already vendored by Next.js -- reused here purely as a
+// realistic embeddable font fixture for registerFont(), not otherwise
+// related to this app.
+const REAL_TTF_BUFFER = readFileSync(
+  path.join(process.cwd(), "node_modules/next/dist/compiled/@vercel/og/Geist-Regular.ttf"),
+);
 
 const TINY_PNG_DATA_URI =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
@@ -174,5 +183,46 @@ describe("pdfkitSvgRenderer", () => {
 
     expect(isPdfBuffer(result.buffer)).toBe(true);
     expect(result.warnings).toEqual([]);
+  });
+
+  describe("custom fonts", () => {
+    it("registers and draws with a real custom font, with no fallback warning", async () => {
+      const result = await pdfkitSvgRenderer.render({
+        svg: FIDELITY_TEST_SVG,
+        width: 400,
+        height: 300,
+        overlays: [baseOverlay({ fontFamily: "custom-font-1" })],
+        customFonts: [{ id: "custom-font-1", buffer: REAL_TTF_BUFFER }],
+      });
+
+      expect(isPdfBuffer(result.buffer)).toBe(true);
+      expect(result.warnings).toEqual([]);
+    });
+
+    it("falls back to the default font with a warning when the overlay's custom font id was never registered", async () => {
+      const result = await pdfkitSvgRenderer.render({
+        svg: FIDELITY_TEST_SVG,
+        width: 400,
+        height: 300,
+        overlays: [baseOverlay({ fontFamily: "deleted-font-id" })],
+        customFonts: [],
+      });
+
+      expect(isPdfBuffer(result.buffer)).toBe(true);
+      expect(result.warnings.some((w) => w.includes("deleted-font-id"))).toBe(true);
+    });
+
+    it("skips a custom font whose bytes PDFKit can't parse and reports it, without failing the render", async () => {
+      const result = await pdfkitSvgRenderer.render({
+        svg: FIDELITY_TEST_SVG,
+        width: 400,
+        height: 300,
+        overlays: [baseOverlay({ fontFamily: "broken-font" })],
+        customFonts: [{ id: "broken-font", buffer: Buffer.from("not a real font") }],
+      });
+
+      expect(isPdfBuffer(result.buffer)).toBe(true);
+      expect(result.warnings.some((w) => w.includes("broken-font"))).toBe(true);
+    });
   });
 });

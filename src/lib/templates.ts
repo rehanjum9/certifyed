@@ -4,23 +4,37 @@ import type { Database } from "@/types/database";
 
 type TemplateRow = Database["public"]["Tables"]["templates"]["Row"];
 
-export async function listTemplates(): Promise<TemplateRow[]> {
+/**
+ * Every template query in this file is scoped by organizationId -- the
+ * workspace-isolation boundary described in the architecture report, item
+ * 22. This is the primary enforcement layer: the service-role client
+ * bypasses RLS entirely (see lib/supabase/server.ts), so a query that
+ * forgets `.eq("organization_id", organizationId)` would otherwise return
+ * every organization's templates. getTemplate deliberately returns null
+ * (not a distinguishable "exists but forbidden" error) for a template that
+ * exists but belongs to a different organization -- identical to "doesn't
+ * exist" from the caller's perspective, so a foreign template id can never
+ * be confirmed to exist by probing this function (see lib/apiError.ts).
+ */
+export async function listTemplates(organizationId: string): Promise<TemplateRow[]> {
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase
     .from("templates")
     .select("*")
+    .eq("organization_id", organizationId)
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(`Failed to load templates: ${error.message}`);
   return data ?? [];
 }
 
-export async function getTemplate(id: string): Promise<TemplateRow | null> {
+export async function getTemplate(id: string, organizationId: string): Promise<TemplateRow | null> {
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase
     .from("templates")
     .select("*")
     .eq("id", id)
+    .eq("organization_id", organizationId)
     .maybeSingle();
 
   if (error) throw new Error(`Failed to load template: ${error.message}`);

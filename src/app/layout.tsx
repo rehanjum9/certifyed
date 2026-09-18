@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AppShell } from "@/components/layout/AppShell";
-import { getSignedInUserEmail } from "@/lib/auth/session";
+import { getLayoutWorkspaceInfo } from "@/lib/organizations/pageContext";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -20,7 +20,7 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
-  const userEmail = await getSignedInUserEmail();
+  const workspace = await getLayoutWorkspaceInfo();
 
   return (
     <html
@@ -28,7 +28,9 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} h-full scroll-smooth antialiased`}
     >
       <body className="min-h-full bg-slate-50 text-slate-900">
-        <AppShell userEmail={userEmail}>{children}</AppShell>
+        <AppShell userEmail={workspace.userEmail} workspace={workspace}>
+          {children}
+        </AppShell>
       </body>
     </html>
   );

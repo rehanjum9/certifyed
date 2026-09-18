@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { guardApiRoute } from "@/lib/auth/apiGuard";
+import { requireOrganizationContext } from "@/lib/auth/organizationGuard";
 import { RATE_LIMITS } from "@/lib/rateLimit";
 import { exceedsDeclaredContentLength } from "@/lib/upload/contentLength";
 import { listCustomFonts, createCustomFont } from "@/lib/fonts/customFonts";
@@ -11,13 +11,13 @@ import { safeApiErrorMessage } from "@/lib/apiError";
 
 const MAX_DISPLAY_NAME_LENGTH = 200;
 
-/** Lists every operator-uploaded custom font -- used by the editor's font picker and the browser FontFace loader (see lib/fonts/useLoadCustomFonts.ts). */
+/** Lists the active workspace's own custom fonts -- used by the editor's font picker and the browser FontFace loader (see lib/fonts/useLoadCustomFonts.ts). Club A never sees Club B's fonts here (architecture report, item 25). */
 export async function GET() {
-  const guard = await guardApiRoute();
+  const guard = await requireOrganizationContext();
   if ("response" in guard) return guard.response;
 
   try {
-    const fonts = await listCustomFonts();
+    const fonts = await listCustomFonts(guard.organizationId);
     return NextResponse.json({ fonts });
   } catch (error) {
     return NextResponse.json(
@@ -35,8 +35,9 @@ export async function GET() {
  * own metadata (see parseMetadata.ts) rather than the raw filename.
  */
 export async function POST(request: Request) {
-  const guard = await guardApiRoute({ rateLimit: { key: "font-upload", ...RATE_LIMITS.fontUpload } });
+  const guard = await requireOrganizationContext({ rateLimit: { key: "font-upload", ...RATE_LIMITS.fontUpload } });
   if ("response" in guard) return guard.response;
+  const { organizationId } = guard;
 
   if (exceedsDeclaredContentLength(request, MAX_FONT_UPLOAD_BYTES)) {
     return NextResponse.json(
@@ -84,7 +85,7 @@ export async function POST(request: Request) {
       : resolveFontDisplayName(buffer, file.name);
 
   const fontId = crypto.randomUUID();
-  const storagePath = `${fontId}/font.${validation.format}`;
+  const storagePath = `${organizationId}/${fontId}/font.${validation.format}`;
 
   const supabase = createServiceRoleClient();
   const { error: uploadError } = await supabase.storage
@@ -100,6 +101,7 @@ export async function POST(request: Request) {
 
   try {
     const font = await createCustomFont({
+      organizationId,
       displayName,
       originalFilename: file.name,
       storagePath,

@@ -124,7 +124,7 @@ export async function generateCertificatesBatch(
   const batchSize = clampBatchSize(requestedBatchSize);
 
   const campaign = await requireCampaign(campaignId);
-  const template = await getTemplate(campaign.template_id);
+  const template = await getTemplate(campaign.template_id, campaign.organization_id);
   if (!template) throw new Error("The template for this campaign no longer exists.");
 
   const [svg, fields] = await Promise.all([
@@ -181,7 +181,7 @@ export async function generateCertificatesBatch(
         customFonts,
       });
 
-      const pdfPath = `campaigns/${campaignId}/${row.id}.pdf`;
+      const pdfPath = `${campaign.organization_id}/campaigns/${campaignId}/${row.id}.pdf`;
       const { error: uploadError } = await supabase.storage
         .from(STORAGE_BUCKETS.outputs)
         .upload(pdfPath, result.buffer, { contentType: "application/pdf", upsert: true });

@@ -55,6 +55,11 @@ export async function proxy(request: NextRequest) {
   const isApiRoute = pathname.startsWith("/api/");
   const isPublicSitePage = PUBLIC_SITE_PATHS.has(pathname);
   const isLoginPage = pathname === LOGIN_PATH;
+  // /auth/confirm establishes the session itself (via verifyOtp) -- the
+  // visitor is never authenticated yet when this request arrives, so it
+  // must never be redirected to /login the way other authenticated-app
+  // pages are. It performs its own token_hash validation regardless.
+  const isAuthRoute = pathname.startsWith("/auth/");
 
   // An authenticated visitor doesn't need the sign-in form -- send them
   // straight to the real app. They may still freely browse the public
@@ -63,7 +68,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
-  if (!user && !isApiRoute && !isPublicSitePage && !isLoginPage) {
+  if (!user && !isApiRoute && !isAuthRoute && !isPublicSitePage && !isLoginPage) {
     const loginUrl = new URL(LOGIN_PATH, request.url);
     loginUrl.searchParams.set("redirectTo", pathname);
     return NextResponse.redirect(loginUrl);

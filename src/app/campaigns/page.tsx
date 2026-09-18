@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { listCampaignsWithOverview } from "@/lib/campaigns/overview";
+import { resolvePageWorkspaceContext } from "@/lib/organizations/pageContext";
+import { NoWorkspaceState } from "@/components/organizations/NoWorkspaceState";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { LinkButton } from "@/components/ui/Button";
@@ -20,7 +22,10 @@ function statusVariant(status: string): "neutral" | "success" | "warning" | "inf
 }
 
 export default async function CampaignsPage() {
-  const campaigns = await listCampaignsWithOverview();
+  const context = await resolvePageWorkspaceContext();
+  if ("noWorkspace" in context) return <NoWorkspaceState />;
+
+  const campaigns = await listCampaignsWithOverview(context.organizationId);
 
   return (
     <PageContainer>

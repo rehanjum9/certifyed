@@ -25,9 +25,13 @@ describe("createGmailOAuthClient", () => {
 });
 
 describe("getGmailSendClient", () => {
-  it("throws a clear configuration error, without touching the network, when GMAIL_REFRESH_TOKEN is missing", () => {
-    delete process.env.GMAIL_REFRESH_TOKEN;
-    expect(() => getGmailSendClient()).toThrow(/GMAIL_REFRESH_TOKEN/);
+  it("builds a client from an explicit refresh token without touching any global env var", () => {
+    expect(() => getGmailSendClient("some-refresh-token")).not.toThrow();
+  });
+
+  it("still requires the shared OAuth app env vars even with a refresh token supplied", () => {
+    delete process.env.GMAIL_CLIENT_ID;
+    expect(() => getGmailSendClient("some-refresh-token")).toThrow(/GMAIL_CLIENT_ID/);
   });
 });
 
@@ -35,7 +39,7 @@ describe("classifyGmailApiError", () => {
   it("maps invalid_grant to a reconnect-Gmail message", () => {
     const error = classifyGmailApiError(400, JSON.stringify({ error: "invalid_grant", error_description: "Token has been expired or revoked." }));
     expect(error.message).toMatch(/expired or was revoked/);
-    expect(error.message).toMatch(/\/api\/email\/gmail\/connect/);
+    expect(error.message).toMatch(/Reconnect this workspace's Gmail account in Settings/);
   });
 
   it("maps a disabled Gmail API response to an enable-the-API message", () => {

@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { getCampaign } from "@/lib/campaigns";
 import { getActiveEmailJob, getLatestEmailJob, startEmailJob } from "@/lib/campaigns/emailJobs";
 import { computeEmailProgress } from "@/lib/campaigns/emailDelivery";
-import { getEmailProviderConfigError } from "@/lib/email/provider";
-import { guardApiRoute } from "@/lib/auth/apiGuard";
+import { getOrganizationEmailSendError } from "@/lib/email/provider";
+import { requireOrganizationContext } from "@/lib/auth/organizationGuard";
 import { RATE_LIMITS } from "@/lib/rateLimit";
 
 function toJobInfo(job: { id: string; status: string; attempts: number; last_error: string | null } | null) {
@@ -16,11 +16,11 @@ function toJobInfo(job: { id: string; status: string; attempts: number; last_err
  * database-derived email progress. Mirrors GET .../generation.
  */
 export async function GET(_request: Request, { params }: RouteContext<"/api/campaigns/[campaignId]/email">) {
-  const guard = await guardApiRoute();
+  const guard = await requireOrganizationContext();
   if ("response" in guard) return guard.response;
 
   const { campaignId } = await params;
-  const campaign = await getCampaign(campaignId);
+  const campaign = await getCampaign(campaignId, guard.organizationId);
   if (!campaign) {
     return NextResponse.json({ error: "Campaign not found." }, { status: 404 });
   }
@@ -37,11 +37,11 @@ export async function GET(_request: Request, { params }: RouteContext<"/api/camp
  * POST /api/jobs/[jobId]/process to actually run batches.
  */
 export async function POST(_request: Request, { params }: RouteContext<"/api/campaigns/[campaignId]/email">) {
-  const guard = await guardApiRoute({ rateLimit: { key: "email-start", ...RATE_LIMITS.emailStart } });
+  const guard = await requireOrganizationContext({ rateLimit: { key: "email-start", ...RATE_LIMITS.emailStart } });
   if ("response" in guard) return guard.response;
 
   const { campaignId } = await params;
-  const campaign = await getCampaign(campaignId);
+  const campaign = await getCampaign(campaignId, guard.organizationId);
   if (!campaign) {
     return NextResponse.json({ error: "Campaign not found." }, { status: 404 });
   }
@@ -52,7 +52,10 @@ export async function POST(_request: Request, { params }: RouteContext<"/api/cam
     return NextResponse.json({ error: "No generated certificates are ready to email yet." }, { status: 400 });
   }
 
-  const configError = getEmailProviderConfigError();
+  // Always the CAMPAIGN's organization (guard.organizationId, resolved above
+  // via the same campaign), never re-derived some other way -- see the
+  // architecture report, item 18.
+  const configError = await getOrganizationEmailSendError(campaign.organization_id);
   if (configError) {
     return NextResponse.json({ error: configError }, { status: 400 });
   }

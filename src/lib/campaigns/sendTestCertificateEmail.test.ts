@@ -24,7 +24,7 @@ function chainable(result: { data: unknown; error: unknown }) {
 function mockSupabase(campaignName: string, row: Record<string, unknown>) {
   return {
     from: (table: string) => {
-      if (table === "campaigns") return chainable({ data: { id: "c1", name: campaignName }, error: null });
+      if (table === "campaigns") return chainable({ data: { id: "c1", organization_id: "org-a", name: campaignName }, error: null });
       return chainable({ data: row, error: null });
     },
     storage: {
@@ -63,5 +63,22 @@ describe("sendTestCertificateEmail subject sanitization", () => {
     // Same header-injection stripping renderCertificateEmail already applies to a real send.
     expect(call.subject).not.toMatch(/[\r\n]/);
     expect(call.subject).toBe("[TEST] Your certificate — Grad Ceremony Bcc: evil@example.com");
+  });
+
+  it("always resolves the sender via the campaign's own organization_id -- never any other context", async () => {
+    const row = {
+      id: "row-1",
+      pdf_path: "campaigns/c1/row-1.pdf",
+      data: { name: "Ali Khan", serial_number: "CERT-101" },
+      recipient_email: "ali@example.com",
+    };
+    vi.mocked(createServiceRoleClient).mockReturnValue(
+      mockSupabase("Grad Ceremony", row) as unknown as ReturnType<typeof createServiceRoleClient>,
+    );
+
+    await sendTestCertificateEmail({ campaignId: "c1", testEmail: "dev@example.com" });
+
+    const context = vi.mocked(sendCertificateEmail).mock.calls[0][1];
+    expect(context).toEqual({ organizationId: "org-a" });
   });
 });

@@ -1,5 +1,7 @@
 import { listTemplates, downloadTemplateSvg } from "@/lib/templates";
 import { listTemplateFields } from "@/lib/templateFields";
+import { resolvePageWorkspaceContext } from "@/lib/organizations/pageContext";
+import { NoWorkspaceState } from "@/components/organizations/NoWorkspaceState";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { LinkButton } from "@/components/ui/Button";
@@ -10,7 +12,10 @@ import { CampaignWizard } from "@/components/campaigns/CampaignWizard";
 export const dynamic = "force-dynamic";
 
 export default async function NewCampaignPage() {
-  const templates = await listTemplates();
+  const context = await resolvePageWorkspaceContext();
+  if ("noWorkspace" in context) return <NoWorkspaceState />;
+
+  const templates = await listTemplates(context.organizationId);
 
   const templateOptions = await Promise.all(
     templates.map(async (template) => ({

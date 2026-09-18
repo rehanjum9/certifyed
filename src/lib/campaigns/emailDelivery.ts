@@ -234,13 +234,16 @@ export async function sendCertificateEmailsBatch(campaignId: string, requestedBa
       });
       const filename = buildCertificateFilename({ recipientName, serialNumber, rowId: row.id });
 
-      const result = await sendCertificateEmail({
-        to: row.recipient_email,
-        subject,
-        html,
-        text,
-        attachment: { filename, content: pdfBuffer },
-      });
+      const result = await sendCertificateEmail(
+        {
+          to: row.recipient_email,
+          subject,
+          html,
+          text,
+          attachment: { filename, content: pdfBuffer },
+        },
+        { organizationId: campaign.organization_id },
+      );
 
       await supabase
         .from("campaign_rows")
@@ -464,16 +467,19 @@ export async function sendTestCertificateEmail({ campaignId, rowId, testEmail }:
   const { subject, html, text } = renderCertificateEmail({ recipientName, campaignName: campaign.name, serialNumber });
   const filename = buildCertificateFilename({ recipientName, serialNumber, rowId: row.id });
 
-  const result = await sendCertificateEmail({
-    to: testEmail,
-    // Reuses the same sanitized subject as a real send (renderCertificateEmail
-    // already strips header-injection characters from campaign.name) --
-    // never builds a second, unsanitized subject string from raw campaign data.
-    subject: `[TEST] ${subject}`,
-    html: `<p style="color:#b45309;font-weight:600;">This is a TEST email -- not sent to the real recipient.</p>${html}`,
-    text: `THIS IS A TEST EMAIL -- not sent to the real recipient.\n\n${text}`,
-    attachment: { filename, content: pdfBuffer },
-  });
+  const result = await sendCertificateEmail(
+    {
+      to: testEmail,
+      // Reuses the same sanitized subject as a real send (renderCertificateEmail
+      // already strips header-injection characters from campaign.name) --
+      // never builds a second, unsanitized subject string from raw campaign data.
+      subject: `[TEST] ${subject}`,
+      html: `<p style="color:#b45309;font-weight:600;">This is a TEST email -- not sent to the real recipient.</p>${html}`,
+      text: `THIS IS A TEST EMAIL -- not sent to the real recipient.\n\n${text}`,
+      attachment: { filename, content: pdfBuffer },
+    },
+    { organizationId: campaign.organization_id },
+  );
 
   // Deliberately does not touch row.status/email_message_id/emailed_at --
   // a test send must never mark a real recipient row as sent.

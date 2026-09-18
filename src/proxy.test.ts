@@ -108,4 +108,12 @@ describe("proxy (auth gate)", () => {
 
     expect(response.headers.get("location")).toBeNull();
   });
+
+  it("lets an unauthenticated visitor reach /auth/confirm without redirecting to /login -- that route establishes the session itself", async () => {
+    vi.mocked(createServerClient).mockReturnValue(mockSupabaseClient(null) as never);
+
+    const response = await proxy(new NextRequest("http://localhost:3000/auth/confirm?token_hash=abc&type=invite"));
+
+    expect(response.headers.get("location")).toBeNull();
+  });
 });

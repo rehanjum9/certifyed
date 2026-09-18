@@ -2,18 +2,18 @@ import { NextResponse } from "next/server";
 import { getTemplate } from "@/lib/templates";
 import { saveTemplateFields } from "@/lib/templateFields";
 import { saveFieldsBodySchema, formatValidationIssue } from "@/lib/validation/templateField";
-import { guardApiRoute } from "@/lib/auth/apiGuard";
+import { requireOrganizationContext } from "@/lib/auth/organizationGuard";
 import { safeApiErrorMessage } from "@/lib/apiError";
 
 export async function PUT(
   request: Request,
   { params }: RouteContext<"/api/templates/[templateId]/fields">,
 ) {
-  const guard = await guardApiRoute();
+  const guard = await requireOrganizationContext();
   if ("response" in guard) return guard.response;
 
   const { templateId } = await params;
-  const template = await getTemplate(templateId);
+  const template = await getTemplate(templateId, guard.organizationId);
 
   if (!template) {
     return NextResponse.json({ error: "Template not found." }, { status: 404 });

@@ -23,6 +23,8 @@ export type CampaignRowStatus =
 export type JobType = "generate_pdfs" | "send_emails";
 export type JobStatus = "pending" | "running" | "completed" | "failed";
 export type FontFormat = "ttf" | "otf";
+export type OrganizationRole = "owner" | "admin" | "member";
+export type EmailConnectionProvider = "gmail";
 
 export interface Database {
   public: {
@@ -30,6 +32,7 @@ export interface Database {
       templates: {
         Row: {
           id: string;
+          organization_id: string;
           name: string;
           svg_path: string;
           svg_width: number;
@@ -41,6 +44,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
+          organization_id: string;
           name: string;
           svg_path: string;
           svg_width: number;
@@ -106,6 +110,7 @@ export interface Database {
       campaigns: {
         Row: {
           id: string;
+          organization_id: string;
           template_id: string;
           name: string;
           status: CampaignStatus;
@@ -119,6 +124,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
+          organization_id: string;
           template_id: string;
           name: string;
           status?: CampaignStatus;
@@ -197,6 +203,7 @@ export interface Database {
       fonts: {
         Row: {
           id: string;
+          organization_id: string;
           display_name: string;
           original_filename: string;
           storage_path: string;
@@ -208,6 +215,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
+          organization_id: string;
           display_name: string;
           original_filename: string;
           storage_path: string;
@@ -217,6 +225,118 @@ export interface Database {
           created_by?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["fonts"]["Insert"]>;
+        Relationships: [];
+      };
+      organizations: {
+        Row: {
+          id: string;
+          name: string;
+          slug: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          slug?: string | null;
+          created_by?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["organizations"]["Insert"]>;
+        Relationships: [];
+      };
+      organization_members: {
+        Row: {
+          id: string;
+          organization_id: string;
+          user_id: string;
+          role: OrganizationRole;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          user_id: string;
+          role: OrganizationRole;
+        };
+        Update: Partial<Database["public"]["Tables"]["organization_members"]["Insert"]>;
+        Relationships: [];
+      };
+      platform_admins: {
+        Row: {
+          user_id: string;
+          created_at: string;
+        };
+        Insert: {
+          user_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["platform_admins"]["Insert"]>;
+        Relationships: [];
+      };
+      organization_invites: {
+        Row: {
+          id: string;
+          organization_id: string;
+          email: string;
+          role: OrganizationRole;
+          invited_by: string;
+          accepted_at: string | null;
+          expires_at: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          email: string;
+          role: OrganizationRole;
+          invited_by: string;
+          accepted_at?: string | null;
+          expires_at: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["organization_invites"]["Insert"]>;
+        Relationships: [];
+      };
+      email_connections: {
+        Row: {
+          id: string;
+          organization_id: string;
+          provider: EmailConnectionProvider;
+          sender_email: string;
+          encrypted_refresh_token: string;
+          connected_by: string | null;
+          connected_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          provider?: EmailConnectionProvider;
+          sender_email: string;
+          encrypted_refresh_token: string;
+          connected_by?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["email_connections"]["Insert"]>;
+        Relationships: [];
+      };
+      gmail_oauth_states: {
+        Row: {
+          id: string;
+          state_token_hash: string;
+          organization_id: string;
+          user_id: string;
+          created_at: string;
+          expires_at: string;
+          consumed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          state_token_hash: string;
+          organization_id: string;
+          user_id: string;
+          expires_at: string;
+          consumed_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["gmail_oauth_states"]["Insert"]>;
         Relationships: [];
       };
     };

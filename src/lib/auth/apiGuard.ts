@@ -14,7 +14,7 @@ export interface GuardOptions {
 
 export type GuardResult = { user: ApiUser } | { response: NextResponse };
 
-interface GuardDeps {
+export interface GuardDeps {
   getUser?: () => Promise<ApiUser | null>;
 }
 

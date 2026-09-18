@@ -6,6 +6,8 @@ import { computeCampaignProgress } from "@/lib/campaigns/generation";
 import { getLatestGenerationJob } from "@/lib/campaigns/jobs";
 import { computeEmailProgress } from "@/lib/campaigns/emailDelivery";
 import { getLatestEmailJob } from "@/lib/campaigns/emailJobs";
+import { resolvePageWorkspaceContext } from "@/lib/organizations/pageContext";
+import { NoWorkspaceState } from "@/components/organizations/NoWorkspaceState";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -36,15 +38,18 @@ function campaignStatusVariant(status: string): BadgeVariant {
 export default async function CampaignDetailPage({
   params,
 }: PageProps<"/campaigns/[campaignId]">) {
+  const context = await resolvePageWorkspaceContext();
+  if ("noWorkspace" in context) return <NoWorkspaceState />;
+
   const { campaignId } = await params;
-  const campaign = await getCampaign(campaignId);
+  const campaign = await getCampaign(campaignId, context.organizationId);
 
   if (!campaign) {
     notFound();
   }
 
   const [template, rows, progress, job, emailProgress, emailJob] = await Promise.all([
-    getTemplate(campaign.template_id),
+    getTemplate(campaign.template_id, context.organizationId),
     listCampaignRows(campaignId),
     computeCampaignProgress(campaignId),
     getLatestGenerationJob(campaignId),

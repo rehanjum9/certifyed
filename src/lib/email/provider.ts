@@ -1,5 +1,6 @@
 import { sendCertificateEmail as sendViaResend } from "./resend";
-import { sendCertificateEmail as sendViaGmail } from "./gmail";
+import { sendCertificateEmail as sendViaGmail, type SendCertificateEmailContext } from "./gmail";
+import { getEmailConnectionForOrganization } from "./connections";
 import type { SendCertificateEmailInput, SendCertificateEmailResult } from "./types";
 
 export type { EmailAttachment, SendCertificateEmailInput, SendCertificateEmailResult } from "./types";
@@ -31,12 +32,14 @@ export function resolveEmailProvider(): EmailProviderName {
 }
 
 /**
- * Pure, non-throwing configuration check for routes that need to show a
- * friendly 400 before attempting to send (e.g. "Start emailing" and "Send
- * test email") instead of surfacing a thrown error. Returns null when the
- * resolved provider is fully configured, otherwise a user-facing message.
- * This is the ONE place that knows which env vars each provider needs --
- * callers never inspect RESEND_* / GMAIL_* env vars directly.
+ * Pure, non-throwing PLATFORM-level configuration check: does this
+ * deployment have the provider's shared app-level configuration at all
+ * (Resend's API key/sending domain; Gmail's shared OAuth client
+ * id/secret/redirect URI)? This deliberately does NOT know about any one
+ * organization's Gmail connection -- since per-workspace Gmail (item 12 of
+ * the architecture report), "is Gmail connected" is no longer a single
+ * global yes/no. Use getOrganizationEmailSendError for the full,
+ * org-aware check a send actually needs.
  */
 export function getEmailProviderConfigError(): string | null {
   let provider: EmailProviderName;
@@ -53,16 +56,31 @@ export function getEmailProviderConfigError(): string | null {
     return null;
   }
 
-  // provider === "gmail"
+  // provider === "gmail" -- platform-level (shared OAuth app) config only.
   if (!process.env.GMAIL_CLIENT_ID || !process.env.GMAIL_CLIENT_SECRET || !process.env.GMAIL_REDIRECT_URI) {
-    return "Gmail sending is not configured. Set GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, and GMAIL_REDIRECT_URI in your environment.";
+    return "Gmail sending is not configured on this deployment. Set GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, and GMAIL_REDIRECT_URI in your environment.";
   }
-  if (!process.env.GMAIL_REFRESH_TOKEN) {
-    return "Gmail is not connected yet. Complete the Gmail connection flow (GET /api/email/gmail/connect) and set GMAIL_REFRESH_TOKEN before sending certificates.";
-  }
-  if (!process.env.GMAIL_FROM_EMAIL) {
-    return "Gmail sending is not configured. Set GMAIL_FROM_EMAIL to the Gmail account you connected via OAuth.";
-  }
+  return null;
+}
+
+/**
+ * The full, organization-aware pre-flight check a real send needs: platform
+ * config first, then (for Gmail) whether THIS organization has connected
+ * an account. Used by the campaign email-start/test-email routes instead
+ * of getEmailProviderConfigError alone, so "Gmail is configured on this
+ * deployment but Club B never connected an account" is reported precisely
+ * -- never silently falls back to any other organization's connection or
+ * a global account (architecture report, item 19).
+ */
+export async function getOrganizationEmailSendError(organizationId: string): Promise<string | null> {
+  const platformError = getEmailProviderConfigError();
+  if (platformError) return platformError;
+
+  const provider = resolveEmailProvider();
+  if (provider !== "gmail") return null;
+
+  const connection = await getEmailConnectionForOrganization(organizationId);
+  if (!connection) return "Connect a Gmail account in Settings before sending certificates.";
   return null;
 }
 
@@ -71,9 +89,19 @@ export function getEmailProviderConfigError(): string | null {
  * batches, test-email) uses. This is the only function in the codebase that
  * knows both providers exist -- everything else calls this and never
  * branches on EMAIL_PROVIDER itself.
+ *
+ * `context.organizationId` MUST be the campaign's own organization_id --
+ * never the caller's currently active workspace (architecture report, item
+ * 18) -- so a resumable job processed later, or by a different signed-in
+ * session, always sends through the same club's Gmail account regardless
+ * of what's active in anyone's browser at that moment. Resend, kept
+ * system-wide (item 20), ignores it.
  */
-export async function sendCertificateEmail(input: SendCertificateEmailInput): Promise<SendCertificateEmailResult> {
+export async function sendCertificateEmail(
+  input: SendCertificateEmailInput,
+  context: SendCertificateEmailContext,
+): Promise<SendCertificateEmailResult> {
   const provider = resolveEmailProvider();
-  if (provider === "gmail") return sendViaGmail(input);
+  if (provider === "gmail") return sendViaGmail(input, context);
   return sendViaResend(input);
 }

@@ -33,6 +33,11 @@ export const RATE_LIMITS = {
   retryEmail: { limit: 10, windowSeconds: 600 },
   fontUpload: { limit: 20, windowSeconds: 600 },
   fontDelete: { limit: 20, windowSeconds: 600 },
+  organizationCreate: { limit: 20, windowSeconds: 600 },
+  invite: { limit: 20, windowSeconds: 600 },
+  gmailConnect: { limit: 10, windowSeconds: 600 },
+  gmailDisconnect: { limit: 10, windowSeconds: 600 },
+  workspaceSwitch: { limit: 60, windowSeconds: 600 },
 } as const satisfies Record<string, RateLimitConfig>;
 
 /** Pure boundary check, split out so the limit decision itself is unit-testable without a database. */

@@ -2,6 +2,8 @@ import Link from "next/link";
 import { listTemplates } from "@/lib/templates";
 import { listCampaignsWithOverview } from "@/lib/campaigns/overview";
 import { getDashboardStats } from "@/lib/dashboard";
+import { resolvePageWorkspaceContext } from "@/lib/organizations/pageContext";
+import { NoWorkspaceState } from "@/components/organizations/NoWorkspaceState";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { StatCard } from "@/components/ui/StatCard";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -34,10 +36,13 @@ function campaignStatusVariant(status: string): "neutral" | "success" | "warning
 }
 
 export default async function DashboardPage() {
+  const context = await resolvePageWorkspaceContext();
+  if ("noWorkspace" in context) return <NoWorkspaceState />;
+
   const [stats, recentCampaigns, templates] = await Promise.all([
-    getDashboardStats(),
-    listCampaignsWithOverview(RECENT_CAMPAIGN_COUNT),
-    listTemplates(),
+    getDashboardStats(context.organizationId),
+    listCampaignsWithOverview(context.organizationId, RECENT_CAMPAIGN_COUNT),
+    listTemplates(context.organizationId),
   ]);
 
   return (

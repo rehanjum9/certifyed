@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sendTestCertificateEmail } from "@/lib/campaigns/emailDelivery";
-import { guardApiRoute } from "@/lib/auth/apiGuard";
+import { getCampaign } from "@/lib/campaigns";
+import { requireOrganizationContext } from "@/lib/auth/organizationGuard";
 import { RATE_LIMITS } from "@/lib/rateLimit";
 
 /**
@@ -12,10 +13,15 @@ import { RATE_LIMITS } from "@/lib/rateLimit";
  * accepted from the request body.
  */
 export async function POST(_request: Request, { params }: RouteContext<"/api/campaigns/[campaignId]/test-email">) {
-  const guard = await guardApiRoute({ rateLimit: { key: "test-email", ...RATE_LIMITS.testEmail } });
+  const guard = await requireOrganizationContext({ rateLimit: { key: "test-email", ...RATE_LIMITS.testEmail } });
   if ("response" in guard) return guard.response;
 
   const { campaignId } = await params;
+
+  const campaign = await getCampaign(campaignId, guard.organizationId);
+  if (!campaign) {
+    return NextResponse.json({ error: "Campaign not found." }, { status: 404 });
+  }
 
   const testEmail = process.env.RESEND_TEST_EMAIL;
   if (!testEmail) {

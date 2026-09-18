@@ -43,6 +43,47 @@ create table public.organization_members (
 create index organization_members_user_id_idx on public.organization_members (user_id);
 create index organization_members_organization_id_idx on public.organization_members (organization_id);
 
+-- organization_id and user_id are a membership row's IDENTITY, not editable
+-- attributes: which organization and which user a row represents must
+-- never change in place. A "move" is always delete + a freshly-authorized
+-- insert (see lib/organizations/invites.ts#acceptInvite), never an UPDATE.
+-- This also closes a real bypass of prevent_last_owner_removal below: that
+-- trigger only fires on DELETE or on an UPDATE that touches the `role`
+-- column, so without this guard an UPDATE that changed only
+-- organization_id (or user_id) on the last owner's row -- silently
+-- reassigning it away -- would never trip the last-owner check at all.
+-- Fires on every UPDATE (not just one naming these columns), so it also
+-- catches an UPDATE that leaves them unspecified-but-unchanged (a no-op,
+-- allowed) versus one that actually changes the value (rejected).
+create or replace function public.prevent_membership_identity_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.organization_id <> old.organization_id then
+    raise exception 'organization_members.organization_id cannot be changed; delete and re-insert the membership instead.';
+  end if;
+  if new.user_id <> old.user_id then
+    raise exception 'organization_members.user_id cannot be changed; delete and re-insert the membership instead.';
+  end if;
+  return new;
+end;
+$$;
+
+-- Trigger functions run as part of the table's own defined behavior, not
+-- via a direct role-issued function call -- firing never requires the
+-- invoking role to hold EXECUTE, so this is revoked from PUBLIC entirely
+-- rather than granted to authenticated/service_role the way the RLS
+-- helper functions below are (those ARE called directly, from policy
+-- USING/WITH CHECK expressions, which does require EXECUTE).
+revoke all on function public.prevent_membership_identity_change() from public;
+
+create trigger organization_members_prevent_identity_change
+  before update on public.organization_members
+  for each row execute function public.prevent_membership_identity_change();
+
 -- Defense in depth: an organization can never end up with zero owners via
 -- any direct table write (application code enforces the same rule before
 -- ever reaching this, but this trigger holds even against a bug or a stray
@@ -85,6 +126,12 @@ begin
   return new;
 end;
 $$;
+
+-- Same rationale as prevent_membership_identity_change above: trigger
+-- firing doesn't need EXECUTE granted to any application role, so PUBLIC's
+-- default EXECUTE grant (every newly created function gets one) is
+-- revoked outright.
+revoke all on function public.prevent_last_owner_removal() from public;
 
 create trigger organization_members_prevent_last_owner_removal
   before delete or update of role on public.organization_members
@@ -218,6 +265,12 @@ as $$
   );
 $$;
 
+-- Not currently referenced by any policy below -- organizations and
+-- organization_members are both authenticated-read-only as of this
+-- hardening pass (every admin-gated write goes through a guarded
+-- service-role route instead, see those tables' RLS sections). Kept,
+-- correctly locked down, as reusable infrastructure for any future
+-- admin-scoped RLS policy on another table.
 create or replace function public.is_organization_admin(p_organization_id uuid)
 returns boolean
 language sql
@@ -255,34 +308,43 @@ grant execute on function public.is_organization_member(uuid) to authenticated, 
 grant execute on function public.is_organization_admin(uuid) to authenticated, service_role;
 grant execute on function public.is_platform_admin() to authenticated, service_role;
 
--- organizations: a member can see their own org; only an org admin/owner
--- can rename it. Platform admins create organizations exclusively through
--- the service-role-backed /api/admin/organizations route (see the
--- architecture report's privacy rule -- platform admin status alone grants
--- no organization RLS access here on purpose).
-grant select, update on table public.organizations to authenticated;
-grant select on table public.organizations to service_role;
+-- organizations: READ-ONLY for authenticated clients. Nothing in the app
+-- performs a direct Supabase update to this table at all -- creation
+-- happens exclusively through the service-role-backed
+-- /api/admin/organizations route, and there is no rename/settings-update
+-- feature (see lib/organizations/organizations.ts -- every write uses
+-- createServiceRoleClient). Explicit `revoke all` first, not just an
+-- omitted grant: a fresh Supabase project's default per-schema privileges
+-- otherwise grant table access to anon/authenticated independently of
+-- anything this migration explicitly grants, so this is a hard reset
+-- before re-granting exactly what's needed (item 5: self-contained,
+-- explicit privileges -- never relying on implicit defaults).
+revoke all on table public.organizations from public, anon, authenticated;
+grant select on table public.organizations to authenticated;
+grant select, insert, update, delete on table public.organizations to service_role;
 
 create policy organizations_select_member on public.organizations
   for select to authenticated
   using (public.is_organization_member(id));
 
-create policy organizations_update_admin on public.organizations
-  for update to authenticated
-  using (public.is_organization_admin(id))
-  with check (public.is_organization_admin(id));
-
--- organization_members: any member of an org can see its member list
--- (needed for the Settings "Workspace" member table); only an admin/owner
--- can add/remove/re-role members. The "no zero owners" invariant is
--- enforced above by prevent_last_owner_removal regardless of this policy.
-grant select, insert, update, delete on table public.organization_members to authenticated;
+-- organization_members: SELECT only for authenticated clients -- every
+-- mutation (invite acceptance, role change, member removal) already goes
+-- through a guarded server route (POST /api/workspace/invites, PATCH/DELETE
+-- /api/workspace/members/[userId], /auth/confirm) using the service-role
+-- client, only after requireOrganizationAdmin or the equivalent
+-- authorization check. Direct authenticated INSERT/UPDATE/DELETE is
+-- revoked outright -- not just left unpolicied -- so an authenticated
+-- session (e.g. a workspace admin) can never bypass those application
+-- safeguards through a raw Supabase client call, such as promoting
+-- themselves straight to "owner" or deleting another member without going
+-- through the guarded route. The "no zero owners" invariant
+-- (prevent_last_owner_removal) and membership-identity immutability
+-- (prevent_membership_identity_change) still apply to service_role writes
+-- too -- triggers fire regardless of role, RLS bypass or not.
+revoke all on table public.organization_members from public, anon, authenticated;
+grant select on table public.organization_members to authenticated;
+grant select, insert, update, delete on table public.organization_members to service_role;
 
 create policy organization_members_select_member on public.organization_members
   for select to authenticated
   using (public.is_organization_member(organization_id));
-
-create policy organization_members_write_admin on public.organization_members
-  for all to authenticated
-  using (public.is_organization_admin(organization_id))
-  with check (public.is_organization_admin(organization_id));

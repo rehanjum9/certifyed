@@ -4,11 +4,9 @@ import { getTemplate, downloadTemplateSvg } from "@/lib/templates";
 import { listTemplateFields } from "@/lib/templateFields";
 import { SvgPreview } from "@/components/templates/SvgPreview";
 import { Badge } from "@/components/ui/Badge";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/Card";
 import { buttonClassName } from "@/components/ui/Button";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { formatDate } from "@/lib/format";
-import { PRIMARY_TEST_NAME, AUTO_FIT_TEST_STRINGS } from "@/lib/pdf/testOverlay";
 
 // Always reflects the current DB/storage state; never statically cached.
 export const dynamic = "force-dynamic";
@@ -73,30 +71,6 @@ export default async function TemplateDetailPage({
             className="mx-auto max-w-2xl rounded-lg"
           />
         </div>
-
-        <Card className="border-dashed shadow-none">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <CardTitle className="text-slate-500">PDF fidelity test</CardTitle>
-              <Badge variant="warning">Experimental</Badge>
-            </div>
-            <CardDescription>
-              Renders this template&apos;s already-sanitized SVG to a vector PDF (PDFKit +
-              svg-to-pdfkit), with a temporary auto-fit name overlay (&quot;{PRIMARY_TEST_NAME}
-              &quot;) and font test strings ({AUTO_FIT_TEST_STRINGS.join(", ")}). This is a
-              one-off manual fidelity check -- nothing is saved, and this is not production
-              certificate generation.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <a
-              href={`/api/templates/${template.id}/pdf-test`}
-              className={buttonClassName("secondary", "sm")}
-            >
-              Generate PDF test
-            </a>
-          </CardContent>
-        </Card>
       </div>
     </PageContainer>
   );

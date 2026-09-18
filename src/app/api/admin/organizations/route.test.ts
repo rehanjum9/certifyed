@@ -55,6 +55,25 @@ describe("POST /api/admin/organizations", () => {
     expect(createInvite).toHaveBeenCalledWith("org-new", "owner@club.example", "owner", "platform-admin-1", expect.any(String));
   });
 
+  it("points the owner invite's redirectTo at /auth/invite, not /auth/confirm", async () => {
+    vi.mocked(requirePlatformAdmin).mockResolvedValue({ user: { id: "platform-admin-1", email: null } });
+    vi.mocked(createOrganization).mockResolvedValue({
+      id: "org-new",
+      name: "Club A",
+      slug: null,
+      created_by: "platform-admin-1",
+      created_at: "now",
+      updated_at: "now",
+    });
+    vi.mocked(createInvite).mockResolvedValue({ status: "invited" });
+
+    await POST(request({ name: "Club A", ownerEmail: "owner@club.example" }));
+
+    const redirectTo = vi.mocked(createInvite).mock.calls[0][4];
+    expect(redirectTo).toContain("/auth/invite");
+    expect(redirectTo).not.toContain("/auth/confirm");
+  });
+
   it("rejects an invalid body without creating anything", async () => {
     vi.mocked(requirePlatformAdmin).mockResolvedValue({ user: { id: "platform-admin-1", email: null } });
 

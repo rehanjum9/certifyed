@@ -38,6 +38,7 @@ export const RATE_LIMITS = {
   gmailConnect: { limit: 10, windowSeconds: 600 },
   gmailDisconnect: { limit: 10, windowSeconds: 600 },
   workspaceSwitch: { limit: 60, windowSeconds: 600 },
+  acceptInvite: { limit: 10, windowSeconds: 600 },
 } as const satisfies Record<string, RateLimitConfig>;
 
 /** Pure boundary check, split out so the limit decision itself is unit-testable without a database. */

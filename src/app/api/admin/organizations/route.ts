@@ -42,7 +42,11 @@ export async function POST(request: Request) {
   // usable the moment the invited owner below accepts.
   const organization = await createOrganization({ name: parsed.data.name, createdBy: guard.user.id });
 
-  const redirectTo = new URL("/auth/confirm", request.url).toString();
+  // See src/app/api/workspace/invites/route.ts for why this points at
+  // /auth/invite (Supabase's default invite email's implicit token flow)
+  // rather than /auth/confirm, and why deriving it from request.url is
+  // correct in both local dev and production.
+  const redirectTo = new URL("/auth/invite", request.url).toString();
   const inviteResult = await createInvite(organization.id, parsed.data.ownerEmail, "owner", guard.user.id, redirectTo);
 
   if (inviteResult.status === "error") {

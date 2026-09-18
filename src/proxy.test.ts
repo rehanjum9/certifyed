@@ -116,4 +116,29 @@ describe("proxy (auth gate)", () => {
 
     expect(response.headers.get("location")).toBeNull();
   });
+
+  it("lets an unauthenticated visitor reach /auth/invite without redirecting to /login -- only the browser can read its URL fragment, and it establishes the session itself once it does", async () => {
+    vi.mocked(createServerClient).mockReturnValue(mockSupabaseClient(null) as never);
+
+    const response = await proxy(new NextRequest("http://localhost:3000/auth/invite"));
+
+    expect(response.headers.get("location")).toBeNull();
+  });
+
+  it("redirects an unauthenticated visitor away from /set-password -- it must only ever be reached with a real session already established", async () => {
+    vi.mocked(createServerClient).mockReturnValue(mockSupabaseClient(null) as never);
+
+    const response = await proxy(new NextRequest("http://localhost:3000/set-password"));
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toContain("/login");
+  });
+
+  it("lets an authenticated visitor (session already established, e.g. by /auth/invite) reach /set-password without redirecting", async () => {
+    vi.mocked(createServerClient).mockReturnValue(mockSupabaseClient({ id: "invited-user-1" }) as never);
+
+    const response = await proxy(new NextRequest("http://localhost:3000/set-password"));
+
+    expect(response.headers.get("location")).toBeNull();
+  });
 });

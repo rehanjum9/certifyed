@@ -34,7 +34,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid invite." }, { status: 400 });
   }
 
-  const redirectTo = new URL("/auth/confirm", request.url).toString();
+  // Supabase's default "Invite user" email uses the implicit
+  // `#access_token=...&type=invite` flow, which only /auth/invite (a
+  // client page -- fragments never reach the server) can handle -- see
+  // components/auth/InviteLandingClient.tsx. Derived from the incoming
+  // request's own origin, not a hardcoded host, so this resolves correctly
+  // in both local dev and production without any env-specific branching.
+  const redirectTo = new URL("/auth/invite", request.url).toString();
 
   const result = await createInvite(guard.organizationId, parsed.data.email, parsed.data.role, guard.user.id, redirectTo);
 

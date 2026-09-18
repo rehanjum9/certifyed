@@ -1,5 +1,5 @@
 import { createServiceRoleClient } from "@/lib/supabase/server";
-import { addOrganizationMember, getMembership } from "./organizations";
+import { addOrganizationMember, getMembership, listMembershipsForUser } from "./organizations";
 import type { OrganizationRole, OrganizationInviteRow } from "./types";
 
 export const INVITE_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -129,4 +129,42 @@ export async function acceptInvite(invite: OrganizationInviteRow, userId: string
 
   const { error } = await supabase.from("organization_invites").update({ accepted_at: new Date().toISOString() }).eq("id", invite.id);
   if (error) throw new Error(`Failed to mark invite accepted: ${error.message}`);
+}
+
+export type FinalizeInviteResult =
+  | { status: "accepted"; organizationId: string }
+  /** No pending invite matched, but the user already belongs to at least one organization -- a harmless re-visit of an already-consumed link (e.g. the browser back button, or a double-click), not an error. */
+  | { status: "already_member" }
+  /** No pending invite matched, and the user belongs to no organization at all -- a genuinely invalid, expired, or forged attempt. */
+  | { status: "no_pending_invite" };
+
+/**
+ * The single entry point every invite-acceptance surface calls (currently:
+ * POST /api/auth/accept-invite, reached from the /auth/invite landing page
+ * -- see the architecture report on the hash/implicit invite flow).
+ * Reuses findPendingInviteForEmail + acceptInvite (the exact same
+ * authorization rule: match by email, case-insensitively, unexpired,
+ * unaccepted) rather than duplicating them -- this function only adds the
+ * "is a fresh failure actually an error, or a harmless re-visit"
+ * disambiguation on top.
+ *
+ * `userId`/`userEmail` MUST come from the caller's already-authenticated
+ * Supabase session (never from request-body/query input) -- the caller is
+ * responsible for that; this function trusts whatever it's given as
+ * already-verified identity.
+ */
+export async function finalizeInviteAcceptance(userId: string, userEmail: string): Promise<FinalizeInviteResult> {
+  const pendingInvite = await findPendingInviteForEmail(userEmail);
+
+  if (pendingInvite) {
+    await acceptInvite(pendingInvite, userId);
+    return { status: "accepted", organizationId: pendingInvite.organization_id };
+  }
+
+  const memberships = await listMembershipsForUser(userId);
+  if (memberships.length > 0) {
+    return { status: "already_member" };
+  }
+
+  return { status: "no_pending_invite" };
 }

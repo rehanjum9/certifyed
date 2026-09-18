@@ -46,6 +46,17 @@ describe("POST /api/workspace/invites", () => {
     expect(createInvite).toHaveBeenCalledWith("org-a", "new@club.example", "member", "admin-1", expect.any(String));
   });
 
+  it("points the invite's redirectTo at /auth/invite -- Supabase's default invite email uses the implicit token flow, which /auth/confirm cannot handle", async () => {
+    vi.mocked(requireOrganizationAdmin).mockResolvedValue(ORG_CONTEXT);
+    vi.mocked(createInvite).mockResolvedValue({ status: "invited" });
+
+    await POST(request({ email: "new@club.example", role: "member" }));
+
+    const redirectTo = vi.mocked(createInvite).mock.calls[0][4];
+    expect(redirectTo).toContain("/auth/invite");
+    expect(redirectTo).not.toContain("/auth/confirm");
+  });
+
   it("rejects an invalid email without inviting anything", async () => {
     vi.mocked(requireOrganizationAdmin).mockResolvedValue(ORG_CONTEXT);
 

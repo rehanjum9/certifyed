@@ -17,6 +17,11 @@
 // reports zero remaining and exits cleanly rather than creating a second
 // workspace.
 //
+// This is a migration script and must never GUESS where legacy data
+// belongs -- if ownerEmail already owns more than one workspace, it
+// refuses to pick one (see resolveTargetOrganization below) rather than
+// silently choosing the first.
+//
 // After this script reports zero remaining NULL organization_id rows,
 // apply 0009_enforce_organization_ownership.sql to make the column
 // required and turn on real per-organization RLS. Do NOT apply 0009
@@ -45,6 +50,7 @@ if (!url || !secretKey) {
 
 const supabase = createClient(url, secretKey, { auth: { persistSession: false } });
 
+/** Case-insensitive: Supabase Auth emails are stored as typed, not normalized, so a plain === match would miss e.g. "Owner@Club.example" vs "owner@club.example". */
 async function findUserByEmail(targetEmail) {
   const target = targetEmail.trim().toLowerCase();
   for (let page = 1; page <= 20; page++) {
@@ -63,47 +69,131 @@ if (!owner) {
   process.exit(1);
 }
 
-// Reuse an existing workspace this user already owns, if this script has
-// already been run once, rather than creating a duplicate on every re-run.
-const { data: existingMemberships, error: membershipError } = await supabase
-  .from("organization_members")
-  .select("organization_id, role")
-  .eq("user_id", owner.id)
-  .eq("role", "owner");
+/**
+ * Decides which workspace this run backfills into -- reusing one this
+ * user already owns (safe re-run), creating a fresh one, or refusing
+ * outright if the answer is ambiguous. A migration script must never
+ * guess where legacy data belongs, so ">1 owned workspace" is a hard
+ * abort, not a "pick the first one" -- unlike a normal app feature, there
+ * is no user in the loop here to catch a wrong guess before it silently
+ * reassigns real data.
+ */
+async function resolveTargetOrganization() {
+  const { data: existingMemberships, error: membershipError } = await supabase
+    .from("organization_members")
+    .select("organization_id, role")
+    .eq("user_id", owner.id)
+    .eq("role", "owner");
 
-if (membershipError) {
-  console.error("Failed to check existing memberships:", membershipError.message);
-  process.exit(1);
-}
+  if (membershipError) {
+    console.error("Failed to check existing memberships:", membershipError.message);
+    process.exit(1);
+  }
 
-let organizationId;
-if (existingMemberships && existingMemberships.length > 0) {
-  organizationId = existingMemberships[0].organization_id;
-  console.log(`${ownerEmail} already owns an existing workspace (id: ${organizationId}) -- reusing it instead of creating a new one.`);
-} else {
-  const { data: org, error: orgError } = await supabase
+  if (existingMemberships && existingMemberships.length > 1) {
+    const orgIds = existingMemberships.map((m) => m.organization_id);
+    const { data: orgs, error: orgsError } = await supabase.from("organizations").select("id, name").in("id", orgIds);
+    if (orgsError) {
+      console.error(`Failed to load the ${orgIds.length} workspaces ${ownerEmail} already owns: ${orgsError.message}`);
+      process.exit(1);
+    }
+
+    console.error(
+      `ABORTING: ${ownerEmail} already owns ${existingMemberships.length} workspaces as "owner". ` +
+        "This script refuses to guess which one legacy data belongs to.",
+    );
+    for (const org of orgs ?? []) {
+      console.error(`  - "${org.name}" (id: ${org.id})`);
+    }
+    console.error(
+      "Resolve this manually first: decide which workspace should receive the legacy templates/campaigns/fonts " +
+        "(and, if any of the others are unintended/duplicate workspaces, remove or reassign them), then re-run " +
+        "this script once the owner unambiguously owns exactly one workspace.",
+    );
+    process.exit(1);
+  }
+
+  if (existingMemberships && existingMemberships.length === 1) {
+    const organizationId = existingMemberships[0].organization_id;
+    const { data: org, error: orgError } = await supabase
+      .from("organizations")
+      .select("id, name")
+      .eq("id", organizationId)
+      .maybeSingle();
+
+    if (orgError || !org) {
+      console.error(`Failed to load the existing workspace (id: ${organizationId}): ${orgError?.message ?? "not found"}`);
+      process.exit(1);
+    }
+
+    console.log(`${ownerEmail} already owns exactly one workspace -- reusing it instead of creating a new one.`);
+    return { organizationId: org.id, organizationName: org.name, created: false };
+  }
+
+  // Zero owned workspaces: create one.
+  const { data: org, error: createOrgError } = await supabase
     .from("organizations")
     .insert({ name: workspaceName, created_by: owner.id })
     .select()
     .single();
 
-  if (orgError) {
-    console.error("Failed to create the default workspace:", orgError.message);
+  if (createOrgError) {
+    console.error("Failed to create the workspace:", createOrgError.message);
     process.exit(1);
   }
-  organizationId = org.id;
 
   const { error: memberError } = await supabase
     .from("organization_members")
-    .insert({ organization_id: organizationId, user_id: owner.id, role: "owner" });
+    .insert({ organization_id: org.id, user_id: owner.id, role: "owner" });
 
   if (memberError) {
-    console.error("Failed to add the owner to the new workspace:", memberError.message);
+    console.error(`Failed to add ${ownerEmail} as owner of the newly-created workspace: ${memberError.message}`);
+    console.error(`Attempting to clean up the partially-created workspace (id: ${org.id}) so it isn't left orphaned...`);
+
+    const { error: cleanupError } = await supabase.from("organizations").delete().eq("id", org.id);
+    if (cleanupError) {
+      console.error(`Cleanup ALSO failed: ${cleanupError.message}`);
+      console.error(
+        `The workspace "${workspaceName}" (id: ${org.id}) was created with NO owner and could not be removed automatically -- delete it manually before re-running this script.`,
+      );
+    } else {
+      console.error("Cleanup succeeded: the orphaned workspace was removed. No changes were left behind.");
+    }
     process.exit(1);
   }
 
-  console.log(`Created workspace "${workspaceName}" (id: ${organizationId}) owned by ${ownerEmail}.`);
+  return { organizationId: org.id, organizationName: org.name, created: true };
 }
+
+const { organizationId, organizationName, created } = await resolveTargetOrganization();
+if (created) {
+  console.log(`Created workspace "${organizationName}" (id: ${organizationId}) owned by ${ownerEmail}.`);
+}
+
+async function countNull(table) {
+  const { count, error } = await supabase.from(table).select("id", { count: "exact", head: true }).is("organization_id", null);
+  if (error) throw new Error(`Failed to count ${table}: ${error.message}`);
+  return count ?? 0;
+}
+
+const before = {
+  templates: await countNull("templates"),
+  campaigns: await countNull("campaigns"),
+  fonts: await countNull("fonts"),
+};
+
+// Pre-flight summary -- printed before anything is written. Never includes
+// secrets (no keys/tokens; only the owner's own email, which they supplied
+// on the command line, and workspace/row counts).
+console.log("");
+console.log("--- Backfill plan --------------------------------------------");
+console.log(`Owner:      ${ownerEmail}`);
+console.log(`Workspace:  "${organizationName}" (id: ${organizationId})`);
+console.log(`Templates missing an organization: ${before.templates}`);
+console.log(`Campaigns missing an organization: ${before.campaigns}`);
+console.log(`Fonts missing an organization:      ${before.fonts}`);
+console.log("----------------------------------------------------------------");
+console.log("");
 
 async function backfillTable(table) {
   const { data, error } = await supabase
@@ -122,16 +212,10 @@ const fontsUpdated = await backfillTable("fonts");
 
 console.log(`Backfilled ${templatesUpdated} template(s), ${campaignsUpdated} campaign(s), ${fontsUpdated} font(s) to this workspace.`);
 
-async function countRemainingNull(table) {
-  const { count, error } = await supabase.from(table).select("id", { count: "exact", head: true }).is("organization_id", null);
-  if (error) throw new Error(`Failed to verify ${table}: ${error.message}`);
-  return count ?? 0;
-}
-
 const remaining = {
-  templates: await countRemainingNull("templates"),
-  campaigns: await countRemainingNull("campaigns"),
-  fonts: await countRemainingNull("fonts"),
+  templates: await countNull("templates"),
+  campaigns: await countNull("campaigns"),
+  fonts: await countNull("fonts"),
 };
 const totalRemaining = remaining.templates + remaining.campaigns + remaining.fonts;
 

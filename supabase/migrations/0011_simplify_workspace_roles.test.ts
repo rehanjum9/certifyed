@@ -8,7 +8,11 @@ import path from "node:path";
 // substitute for actually applying this against a real Supabase project
 // and exercising it (see the accompanying report's manual verification
 // steps).
-const MIGRATION_SQL = readFileSync(path.join(import.meta.dirname, "0011_simplify_workspace_roles.sql"), "utf8");
+// Normalized to "\n" once, here, so every exact-string/indexOf assertion
+// below is line-ending-independent -- a checkout with CRLF line endings
+// (common on Windows) must not make these fail on a migration that is
+// otherwise byte-for-byte correct.
+const MIGRATION_SQL = readFileSync(path.join(import.meta.dirname, "0011_simplify_workspace_roles.sql"), "utf8").replace(/\r\n?/g, "\n");
 const CODE_ONLY = MIGRATION_SQL.replace(/--.*$/gm, "");
 
 describe("0011 -- admin role removed safely, never guessed toward owner", () => {

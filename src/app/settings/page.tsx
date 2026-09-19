@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { resolvePageWorkspaceContext } from "@/lib/organizations/pageContext";
 import { listOrganizationMembers } from "@/lib/organizations/organizations";
-import { roleAtLeast } from "@/lib/organizations/types";
 import { getEmailConnectionSummary } from "@/lib/email/connections";
 import { resolveEmailProvider, getEmailProviderConfigError, type EmailProviderName } from "@/lib/email/provider";
 import { maskEmail } from "@/lib/email/mask";
@@ -9,6 +8,7 @@ import { listCustomFonts } from "@/lib/fonts/customFonts";
 import { NoWorkspaceState } from "@/components/organizations/NoWorkspaceState";
 import { InviteMemberForm } from "@/components/settings/InviteMemberForm";
 import { MemberList } from "@/components/settings/MemberList";
+import { TransferOwnershipForm } from "@/components/settings/TransferOwnershipForm";
 import { GmailDisconnectButton } from "@/components/settings/GmailDisconnectButton";
 import { FontsList } from "@/components/settings/FontsList";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -44,7 +44,7 @@ export default async function SettingsPage() {
   const context = await resolvePageWorkspaceContext();
   if ("noWorkspace" in context) return <NoWorkspaceState />;
 
-  const canManageWorkspace = roleAtLeast(context.role, "admin");
+  const canManageWorkspace = context.role === "owner";
 
   const [members, emailConnection, fonts] = await Promise.all([
     listOrganizationMembers(context.organizationId),
@@ -118,6 +118,13 @@ export default async function SettingsPage() {
                   <InviteMemberForm />
                 </div>
               )}
+
+              {canManageWorkspace && (
+                <div className="border-t border-slate-100 pt-4">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Transfer ownership</p>
+                  <TransferOwnershipForm candidates={members.filter((member) => member.role !== "owner")} />
+                </div>
+              )}
             </div>
           </Card>
         </section>
@@ -172,7 +179,7 @@ export default async function SettingsPage() {
                           Connect Gmail
                         </LinkButton>
                       ) : (
-                        <p className="text-xs text-slate-400">Ask a workspace owner or admin to connect Gmail.</p>
+                        <p className="text-xs text-slate-400">Ask the workspace owner to connect Gmail.</p>
                       )}
                     </>
                   )}

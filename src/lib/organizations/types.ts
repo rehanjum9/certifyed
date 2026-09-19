@@ -19,10 +19,3 @@ export interface OrganizationMemberSummary {
   role: OrganizationRole;
   createdAt: string;
 }
-
-/** Role ranking used only to compare "is at least as privileged as" -- never persisted, never sent to the client as a number. */
-const ROLE_RANK: Record<OrganizationRole, number> = { member: 0, admin: 1, owner: 2 };
-
-export function roleAtLeast(role: OrganizationRole, minimum: OrganizationRole): boolean {
-  return ROLE_RANK[role] >= ROLE_RANK[minimum];
-}

@@ -119,7 +119,7 @@ describe("createInvite", () => {
     vi.mocked(createServiceRoleClient).mockReturnValue(client as unknown as ReturnType<typeof createServiceRoleClient>);
     vi.mocked(getMembership).mockResolvedValue({ role: "member" });
 
-    const result = await createInvite("org-a", "already@club.example", "admin", "admin-1", "https://app.example/auth/confirm");
+    const result = await createInvite("org-a", "already@club.example", "member", "admin-1", "https://app.example/auth/confirm");
 
     expect(result).toEqual({ status: "already_member" });
     expect(addOrganizationMember).not.toHaveBeenCalled();
@@ -196,7 +196,7 @@ describe("finalizeInviteAcceptance", () => {
     id: "invite-1",
     organization_id: "org-a",
     email: "person@club.example",
-    role: "admin",
+    role: "member",
     invited_by: "admin-1",
     accepted_at: null,
     expires_at: new Date(Date.now() + 100000).toISOString(),
@@ -211,7 +211,7 @@ describe("finalizeInviteAcceptance", () => {
     const result = await finalizeInviteAcceptance("new-user-1", "person@club.example");
 
     expect(result).toEqual({ status: "accepted", organizationId: "org-a" });
-    expect(addOrganizationMember).toHaveBeenCalledWith("org-a", "new-user-1", "admin");
+    expect(addOrganizationMember).toHaveBeenCalledWith("org-a", "new-user-1", "member");
     expect(client.updatedInviteIds).toEqual(["invite-1"]);
   });
 
@@ -224,7 +224,6 @@ describe("finalizeInviteAcceptance", () => {
     await finalizeInviteAcceptance("new-user-1", "person@club.example");
 
     expect(addOrganizationMember).toHaveBeenCalledWith("org-a", "new-user-1", "owner");
-    expect(addOrganizationMember).not.toHaveBeenCalledWith("org-a", "new-user-1", "admin");
     expect(addOrganizationMember).not.toHaveBeenCalledWith("org-a", "new-user-1", "member");
   });
 

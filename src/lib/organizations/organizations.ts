@@ -239,18 +239,6 @@ export async function listOrganizationMembers(organizationId: string): Promise<O
   }));
 }
 
-export async function countOwners(organizationId: string): Promise<number> {
-  const supabase = createServiceRoleClient();
-  const { count, error } = await supabase
-    .from("organization_members")
-    .select("id", { count: "exact", head: true })
-    .eq("organization_id", organizationId)
-    .eq("role", "owner");
-
-  if (error) throw new Error(`Failed to count owners: ${error.message}`);
-  return count ?? 0;
-}
-
 export async function addOrganizationMember(
   organizationId: string,
   userId: string,
@@ -261,25 +249,27 @@ export async function addOrganizationMember(
   if (error) throw new Error(`Failed to add member: ${error.message}`);
 }
 
-export type RemoveMemberResult = { ok: true } | { ok: false; reason: "last_owner" } | { ok: false; reason: "not_found" };
+export type RemoveMemberResult = { ok: true } | { ok: false; reason: "owner" } | { ok: false; reason: "not_found" };
 
 /**
- * Removes a member. The "cannot remove the last owner" rule is enforced
- * both here (a clean, specific application-level result) and in the
- * database itself (prevent_last_owner_removal trigger, 0007_organizations.sql)
- * as defense in depth -- the trigger is what actually guarantees the
- * invariant even against a bug elsewhere.
+ * Removes a member from a workspace. Owner-only action (see
+ * requireOrganizationOwner) -- a member can never remove themselves or
+ * anyone else through this. The workspace owner can never be removed
+ * through this generic endpoint at all, regardless of who's calling
+ * (including the owner trying to remove themselves): with the two-role
+ * model (owner/member -- 0011_simplify_workspace_roles.sql) every
+ * organization has EXACTLY one owner at all times, enforced at the
+ * database level (0007's prevent_last_owner_removal trigger, plus 0011's
+ * deferred exactly-one-owner constraint trigger) -- leadership change goes
+ * through transferOrganizationOwnership instead, explicitly, never as a
+ * side effect of removing someone.
  */
 export async function removeOrganizationMember(organizationId: string, userId: string): Promise<RemoveMemberResult> {
   const supabase = createServiceRoleClient();
 
   const membership = await getMembership(organizationId, userId);
   if (!membership) return { ok: false, reason: "not_found" };
-
-  if (membership.role === "owner") {
-    const owners = await countOwners(organizationId);
-    if (owners <= 1) return { ok: false, reason: "last_owner" };
-  }
+  if (membership.role === "owner") return { ok: false, reason: "owner" };
 
   const { error } = await supabase
     .from("organization_members")
@@ -287,40 +277,54 @@ export async function removeOrganizationMember(organizationId: string, userId: s
     .eq("organization_id", organizationId)
     .eq("user_id", userId);
 
-  if (error) {
-    if (error.message.toLowerCase().includes("last owner")) return { ok: false, reason: "last_owner" };
-    throw new Error(`Failed to remove member: ${error.message}`);
-  }
+  if (error) throw new Error(`Failed to remove member: ${error.message}`);
   return { ok: true };
 }
 
-export type UpdateMemberRoleResult = { ok: true } | { ok: false; reason: "last_owner" } | { ok: false; reason: "not_found" };
+export type TransferOwnershipResult =
+  | { ok: true }
+  | { ok: false; reason: "current_owner_mismatch" }
+  | { ok: false; reason: "new_owner_not_found" }
+  | { ok: false; reason: "same_user" };
 
-export async function updateOrganizationMemberRole(
+/**
+ * Atomically transfers workspace ownership: the current owner becomes a
+ * plain member, and the chosen existing member becomes the new owner.
+ * Delegates to the transfer_organization_ownership Postgres function
+ * (0011_simplify_workspace_roles.sql) so both role changes happen inside
+ * ONE database transaction -- two separate application-level UPDATE calls
+ * would each be their own transaction, and a failure between them could
+ * leave a real, persisted two-owner (or briefly zero-owner) state. See
+ * that function's own doc comment for the full safety argument (why
+ * promote-then-demote in that order is safe, and how 0011's deferred
+ * exactly-one-owner trigger tolerates it).
+ *
+ * `currentOwnerUserId` must come from the caller's own authenticated
+ * identity (requireOrganizationOwner), never from request input -- this
+ * function still re-verifies it server-side (via the RPC's own checks)
+ * rather than trusting it blindly.
+ */
+export async function transferOrganizationOwnership(
   organizationId: string,
-  userId: string,
-  role: OrganizationRole,
-): Promise<UpdateMemberRoleResult> {
+  currentOwnerUserId: string,
+  newOwnerUserId: string,
+): Promise<TransferOwnershipResult> {
+  if (currentOwnerUserId === newOwnerUserId) return { ok: false, reason: "same_user" };
+
   const supabase = createServiceRoleClient();
-
-  const membership = await getMembership(organizationId, userId);
-  if (!membership) return { ok: false, reason: "not_found" };
-
-  if (membership.role === "owner" && role !== "owner") {
-    const owners = await countOwners(organizationId);
-    if (owners <= 1) return { ok: false, reason: "last_owner" };
-  }
-
-  const { error } = await supabase
-    .from("organization_members")
-    .update({ role })
-    .eq("organization_id", organizationId)
-    .eq("user_id", userId);
+  const { error } = await supabase.rpc("transfer_organization_ownership", {
+    p_organization_id: organizationId,
+    p_current_owner_id: currentOwnerUserId,
+    p_new_owner_id: newOwnerUserId,
+  });
 
   if (error) {
-    if (error.message.toLowerCase().includes("last owner")) return { ok: false, reason: "last_owner" };
-    throw new Error(`Failed to update member role: ${error.message}`);
+    const message = error.message.toLowerCase();
+    if (message.includes("not the current owner")) return { ok: false, reason: "current_owner_mismatch" };
+    if (message.includes("not a member")) return { ok: false, reason: "new_owner_not_found" };
+    throw new Error(`Failed to transfer ownership: ${error.message}`);
   }
+
   return { ok: true };
 }
 

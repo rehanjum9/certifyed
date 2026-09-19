@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { NextResponse } from "next/server";
 
-vi.mock("@/lib/auth/organizationGuard", () => ({ requireOrganizationAdmin: vi.fn() }));
+vi.mock("@/lib/auth/organizationGuard", () => ({ requireOrganizationOwner: vi.fn() }));
 vi.mock("@/lib/email/gmailClient", () => ({
   createGmailOAuthClient: vi.fn(),
   GMAIL_SEND_SCOPE: "https://www.googleapis.com/auth/gmail.send",
@@ -9,7 +9,7 @@ vi.mock("@/lib/email/gmailClient", () => ({
 }));
 vi.mock("@/lib/email/gmailOAuth", () => ({ createOAuthState: vi.fn() }));
 
-import { requireOrganizationAdmin } from "@/lib/auth/organizationGuard";
+import { requireOrganizationOwner } from "@/lib/auth/organizationGuard";
 import { createGmailOAuthClient, GMAIL_SEND_SCOPE, GMAIL_IDENTITY_SCOPES } from "@/lib/email/gmailClient";
 import { createOAuthState } from "@/lib/email/gmailOAuth";
 import { GET } from "./route";
@@ -18,7 +18,7 @@ const ORIGINAL_ENV = { ...process.env };
 const ORG_CONTEXT = { user: { id: "user-1", email: null }, organizationId: "org-a", organizationName: "Club A", role: "owner" as const };
 
 beforeEach(() => {
-  vi.mocked(requireOrganizationAdmin).mockResolvedValue(ORG_CONTEXT);
+  vi.mocked(requireOrganizationOwner).mockResolvedValue(ORG_CONTEXT);
   vi.mocked(createOAuthState).mockResolvedValue("random-state-token");
 });
 
@@ -28,9 +28,9 @@ afterEach(() => {
 });
 
 describe("GET /api/email/gmail/connect", () => {
-  it("requires workspace admin/owner access -- returns whatever the guard's response is, without touching Google or creating any state", async () => {
-    vi.mocked(requireOrganizationAdmin).mockResolvedValue({
-      response: NextResponse.json({ error: "Only a workspace owner or admin can perform this action." }, { status: 403 }),
+  it("requires workspace owner access -- returns whatever the guard's response is, without touching Google or creating any state", async () => {
+    vi.mocked(requireOrganizationOwner).mockResolvedValue({
+      response: NextResponse.json({ error: "Only the workspace owner can perform this action." }, { status: 403 }),
     });
 
     const response = await GET();

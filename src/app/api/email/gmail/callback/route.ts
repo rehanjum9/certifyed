@@ -1,7 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { guardApiRoute } from "@/lib/auth/apiGuard";
 import { getMembership } from "@/lib/organizations/organizations";
-import { roleAtLeast } from "@/lib/organizations/types";
 import { createGmailOAuthClient, getAuthorizedAccountEmail } from "@/lib/email/gmailClient";
 import { consumeOAuthState } from "@/lib/email/gmailOAuth";
 import { saveEmailConnection } from "@/lib/email/connections";
@@ -38,8 +37,9 @@ function errorPage(message: string): NextResponse {
  *   authenticated user -- `?organizationId=...` or any other
  *   client-supplied value is never trusted; the organization this
  *   connects to comes ONLY from that state record.
- * - The caller's admin/owner role in that organization is re-checked here
- *   (not just at /connect time) in case it changed in between.
+ * - The caller's owner role in that organization is re-checked here (not
+ *   just at /connect time) in case it changed in between -- Gmail
+ *   connection management is owner-only (see requireOrganizationOwner).
  * - The connected account's email is read from Google's own signed ID
  *   token (getAuthorizedAccountEmail), never typed by the user -- no
  *   From-address spoofing.
@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
   }
 
   const membership = await getMembership(stateResult.organizationId, guard.user.id);
-  if (!membership || !roleAtLeast(membership.role, "admin")) {
+  if (!membership || membership.role !== "owner") {
     return errorPage("You no longer have permission to manage this workspace's email connection.");
   }
 

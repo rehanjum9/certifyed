@@ -78,7 +78,7 @@ describe("GET /api/email/gmail/callback", () => {
     expect(consumeOAuthState).toHaveBeenCalledWith("xyz", "user-1");
   });
 
-  it("rejects the connection if the caller is no longer an admin/owner of the state's organization, even with a valid state", async () => {
+  it("rejects the connection if the caller is no longer the owner of the state's organization, even with a valid state", async () => {
     vi.mocked(consumeOAuthState).mockResolvedValue({ ok: true, organizationId: "org-a" });
     vi.mocked(getMembership).mockResolvedValue({ role: "member" });
 

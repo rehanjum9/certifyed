@@ -3,7 +3,6 @@ import { cookies } from "next/headers";
 import { guardApiRoute, type ApiUser, type GuardOptions, type GuardDeps } from "./apiGuard";
 import { listMembershipsForUser, getMembership, isPlatformAdmin } from "@/lib/organizations/organizations";
 import { pickActiveMembership, ACTIVE_ORG_COOKIE } from "@/lib/organizations/activeWorkspace";
-import { roleAtLeast } from "@/lib/organizations/types";
 import type { Membership, OrganizationRole } from "@/lib/organizations/types";
 
 /**
@@ -78,16 +77,24 @@ export async function requireOrganizationContext(
   return { user: guard.user, organizationId: active.organizationId, organizationName: active.organizationName, role: active.role };
 }
 
-/** Same as requireOrganizationContext, but the caller's role in the active workspace must be "owner" or "admin". */
-export async function requireOrganizationAdmin(
+/**
+ * Same as requireOrganizationContext, but the caller's role in the active
+ * workspace must be "owner". Two-role model (owner/member -- see
+ * 0011_simplify_workspace_roles.sql): every membership/Gmail/workspace-
+ * management operation is owner-only, never something a plain member can
+ * reach. Certificate operations (templates/campaigns/fonts/jobs) use
+ * requireOrganizationContext/requireOrganizationMember instead -- any role
+ * is enough for those.
+ */
+export async function requireOrganizationOwner(
   options: GuardOptions = {},
   deps: OrgGuardDeps = {},
 ): Promise<OrgContextResult> {
   const context = await requireOrganizationContext(options, deps);
   if ("response" in context) return context;
 
-  if (!roleAtLeast(context.role, "admin")) {
-    return forbidden("Only a workspace owner or admin can perform this action.");
+  if (context.role !== "owner") {
+    return forbidden("Only the workspace owner can perform this action.");
   }
   return context;
 }
@@ -118,8 +125,8 @@ export async function requireOrganizationMember(
   return { user: guard.user, role: membership.role };
 }
 
-/** Same as requireOrganizationMember, but requires "owner" or "admin" in that specific organization. */
-export async function requireOrganizationAdminOf(
+/** Same as requireOrganizationMember, but requires "owner" in that specific organization. */
+export async function requireOrganizationOwnerOf(
   organizationId: string,
   options: GuardOptions = {},
   deps: OrgGuardDeps = {},
@@ -127,8 +134,8 @@ export async function requireOrganizationAdminOf(
   const result = await requireOrganizationMember(organizationId, options, deps);
   if ("response" in result) return result;
 
-  if (!roleAtLeast(result.role, "admin")) {
-    return forbidden("Only a workspace owner or admin can perform this action.");
+  if (result.role !== "owner") {
+    return forbidden("Only the workspace owner can perform this action.");
   }
   return result;
 }

@@ -1,25 +1,29 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireOrganizationAdmin } from "@/lib/auth/organizationGuard";
+import { requireOrganizationOwner } from "@/lib/auth/organizationGuard";
 import { createInvite } from "@/lib/organizations/invites";
 import { RATE_LIMITS } from "@/lib/rateLimit";
 
 const bodySchema = z.object({
   email: z.string().trim().email().max(320),
-  role: z.enum(["owner", "admin", "member"]),
 });
 
 /**
- * Workspace-admin-only: invites a new member into the caller's ACTIVE
- * workspace. Public signup stays fully disabled -- this is the only way a
- * new person ever gets into the app (besides the platform-admin-only
- * /api/admin/organizations, which invites a workspace's first owner). See
+ * Workspace-owner-only: invites a new member into the caller's ACTIVE
+ * workspace. Two-role model (owner/member -- see
+ * 0011_simplify_workspace_roles.sql): every ordinary invite always grants
+ * "member" -- there is no role choice here at all, and none is accepted
+ * from the client. (The one exception, a workspace's very first owner, is
+ * a completely separate flow: the platform-admin-only
+ * /api/admin/organizations, which is the only route that ever creates an
+ * "owner" invite.) Public signup stays fully disabled -- this is the only
+ * way a new person ever gets into an existing workspace. See
  * lib/organizations/invites.ts for the two paths this can take (a real
  * Supabase Auth invite email for a brand-new person, or an immediate
  * membership add for someone who already has an account in another club).
  */
 export async function POST(request: Request) {
-  const guard = await requireOrganizationAdmin({ rateLimit: { key: "invite", ...RATE_LIMITS.invite } });
+  const guard = await requireOrganizationOwner({ rateLimit: { key: "invite", ...RATE_LIMITS.invite } });
   if ("response" in guard) return guard.response;
 
   let body: unknown;
@@ -42,7 +46,7 @@ export async function POST(request: Request) {
   // in both local dev and production without any env-specific branching.
   const redirectTo = new URL("/auth/invite", request.url).toString();
 
-  const result = await createInvite(guard.organizationId, parsed.data.email, parsed.data.role, guard.user.id, redirectTo);
+  const result = await createInvite(guard.organizationId, parsed.data.email, "member", guard.user.id, redirectTo);
 
   if (result.status === "error") {
     return NextResponse.json({ error: result.error }, { status: 500 });

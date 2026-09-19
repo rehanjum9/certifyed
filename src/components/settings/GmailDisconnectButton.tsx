@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Spinner } from "@/components/ui/Spinner";
 
-/** Workspace-admin-only (see /api/email/gmail/disconnect). Removes only this workspace's Gmail connection -- generation/downloads are unaffected, only sending stops until reconnected. */
+/** Workspace-owner-only (see /api/email/gmail/disconnect). Removes only this workspace's Gmail connection -- generation/downloads are unaffected, only sending stops until reconnected. */
 export function GmailDisconnectButton() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);

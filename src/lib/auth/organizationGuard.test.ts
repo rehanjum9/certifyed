@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   requireOrganizationContext,
-  requireOrganizationAdmin,
+  requireOrganizationOwner,
   requireOrganizationMember,
-  requireOrganizationAdminOf,
+  requireOrganizationOwnerOf,
   requirePlatformAdmin,
   assertResourceBelongsToOrganization,
 } from "./organizationGuard";
@@ -11,7 +11,6 @@ import type { Membership } from "@/lib/organizations/types";
 
 const USER_A = { id: "user-a", email: "a@clubA.example" };
 const ORG_A: Membership = { organizationId: "org-a", organizationName: "Club A", role: "member" };
-const ORG_A_ADMIN: Membership = { organizationId: "org-a", organizationName: "Club A", role: "admin" };
 const ORG_B: Membership = { organizationId: "org-b", organizationName: "Club B", role: "owner" };
 
 describe("requireOrganizationContext", () => {
@@ -69,9 +68,9 @@ describe("requireOrganizationContext", () => {
   });
 });
 
-describe("requireOrganizationAdmin", () => {
+describe("requireOrganizationOwner", () => {
   it("rejects a plain member with a 403", async () => {
-    const result = await requireOrganizationAdmin(
+    const result = await requireOrganizationOwner(
       {},
       { getUser: async () => USER_A, listMemberships: async () => [ORG_A], getActiveOrgCookie: async () => null },
     );
@@ -79,16 +78,8 @@ describe("requireOrganizationAdmin", () => {
     if ("response" in result) expect(result.response.status).toBe(403);
   });
 
-  it("allows an admin", async () => {
-    const result = await requireOrganizationAdmin(
-      {},
-      { getUser: async () => USER_A, listMemberships: async () => [ORG_A_ADMIN], getActiveOrgCookie: async () => null },
-    );
-    expect("response" in result).toBe(false);
-  });
-
-  it("allows an owner", async () => {
-    const result = await requireOrganizationAdmin(
+  it("allows the owner", async () => {
+    const result = await requireOrganizationOwner(
       {},
       { getUser: async () => USER_A, listMemberships: async () => [ORG_B], getActiveOrgCookie: async () => null },
     );
@@ -114,15 +105,15 @@ describe("requireOrganizationMember (specific organization id, independent of th
   });
 });
 
-describe("requireOrganizationAdminOf", () => {
+describe("requireOrganizationOwnerOf", () => {
   it("rejects a plain member of that specific organization", async () => {
-    const result = await requireOrganizationAdminOf("org-a", {}, { getUser: async () => USER_A, getMembership: async () => ({ role: "member" }) });
+    const result = await requireOrganizationOwnerOf("org-a", {}, { getUser: async () => USER_A, getMembership: async () => ({ role: "member" }) });
     expect("response" in result).toBe(true);
     if ("response" in result) expect(result.response.status).toBe(403);
   });
 
-  it("allows an admin/owner of that specific organization", async () => {
-    const result = await requireOrganizationAdminOf("org-a", {}, { getUser: async () => USER_A, getMembership: async () => ({ role: "owner" }) });
+  it("allows the owner of that specific organization", async () => {
+    const result = await requireOrganizationOwnerOf("org-a", {}, { getUser: async () => USER_A, getMembership: async () => ({ role: "owner" }) });
     expect("response" in result).toBe(false);
   });
 });

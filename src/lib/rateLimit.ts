@@ -42,6 +42,7 @@ export const RATE_LIMITS = {
   organizationDelete: { limit: 20, windowSeconds: 600 },
   organizationInviteResend: { limit: 20, windowSeconds: 600 },
   organizationInviteCancel: { limit: 20, windowSeconds: 600 },
+  transferOwnership: { limit: 10, windowSeconds: 600 },
 } as const satisfies Record<string, RateLimitConfig>;
 
 /** Pure boundary check, split out so the limit decision itself is unit-testable without a database. */

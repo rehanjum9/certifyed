@@ -2,44 +2,32 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { inputClassName } from "@/components/ui/Input";
+import { Badge } from "@/components/ui/Badge";
 import { formatDate } from "@/lib/format";
-import type { OrganizationMemberSummary, OrganizationRole } from "@/lib/organizations/types";
-
-const ROLE_OPTIONS: OrganizationRole[] = ["member", "admin", "owner"];
+import type { OrganizationMemberSummary } from "@/lib/organizations/types";
 
 interface MemberListProps {
   members: OrganizationMemberSummary[];
-  /** True for owner/admin -- controls whether role/remove controls render at all. A normal member sees a read-only list (architecture report, item 10: normal members cannot manage membership). */
+  /** True for the workspace owner only -- controls whether the Remove control renders at all. A plain member sees a read-only list (two-role model: only the owner manages membership -- see 0011_simplify_workspace_roles.sql). */
   canManage: boolean;
   currentUserId: string;
 }
 
-/** Workspace member list + management (owner/admin only). Safeguards -- a workspace can't end up with zero owners, and a member can't manage anything at all -- are enforced server-side (PATCH/DELETE /api/workspace/members/[userId]); this component just surfaces whatever error that returns. */
+/**
+ * Workspace member list (owner-only management). No role dropdown --
+ * "owner"/"member" is shown as a plain badge; the only supported role
+ * change is ownership transfer (see TransferOwnershipForm), never a casual
+ * per-row switch. The owner row never gets a Remove button, for anyone,
+ * including the owner themselves -- see removeOrganizationMember's own
+ * doc comment for why (leadership change must go through an explicit
+ * transfer first). Safeguards are enforced server-side
+ * (DELETE /api/workspace/members/[userId]); this component just surfaces
+ * whatever error that returns.
+ */
 export function MemberList({ members, canManage, currentUserId }: MemberListProps) {
   const router = useRouter();
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  async function changeRole(userId: string, role: OrganizationRole) {
-    setBusyUserId(userId);
-    setError(null);
-    try {
-      const response = await fetch(`/api/workspace/members/${userId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role }),
-      });
-      const body = (await response.json().catch(() => ({}))) as { error?: string };
-      if (!response.ok) {
-        setError(body.error ?? "Failed to change role.");
-        return;
-      }
-      router.refresh();
-    } finally {
-      setBusyUserId(null);
-    }
-  }
 
   async function removeMember(userId: string) {
     setBusyUserId(userId);
@@ -70,20 +58,9 @@ export function MemberList({ members, canManage, currentUserId }: MemberListProp
               <p className="text-xs text-slate-400">joined {formatDate(member.createdAt)}</p>
             </div>
 
-            {canManage ? (
-              <div className="flex shrink-0 items-center gap-2">
-                <select
-                  value={member.role}
-                  disabled={busyUserId === member.userId}
-                  onChange={(e) => changeRole(member.userId, e.target.value as OrganizationRole)}
-                  className={`${inputClassName} w-auto py-1 text-xs`}
-                >
-                  {ROLE_OPTIONS.map((role) => (
-                    <option key={role} value={role}>
-                      {role}
-                    </option>
-                  ))}
-                </select>
+            <div className="flex shrink-0 items-center gap-2">
+              <Badge variant={member.role === "owner" ? "success" : "neutral"}>{member.role === "owner" ? "Owner" : "Member"}</Badge>
+              {canManage && member.role !== "owner" && (
                 <button
                   type="button"
                   disabled={busyUserId === member.userId}
@@ -92,10 +69,8 @@ export function MemberList({ members, canManage, currentUserId }: MemberListProp
                 >
                   Remove
                 </button>
-              </div>
-            ) : (
-              <span className="shrink-0 text-xs font-medium uppercase tracking-wide text-slate-400">{member.role}</span>
-            )}
+              )}
+            </div>
           </div>
         ))}
       </div>

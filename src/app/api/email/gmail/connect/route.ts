@@ -1,21 +1,23 @@
 import { NextResponse } from "next/server";
-import { requireOrganizationAdmin } from "@/lib/auth/organizationGuard";
+import { requireOrganizationOwner } from "@/lib/auth/organizationGuard";
 import { createGmailOAuthClient, GMAIL_SEND_SCOPE, GMAIL_IDENTITY_SCOPES } from "@/lib/email/gmailClient";
 import { createOAuthState } from "@/lib/email/gmailOAuth";
 import { RATE_LIMITS } from "@/lib/rateLimit";
 
 /**
- * Workspace-admin-only: starts the Gmail OAuth consent flow for the
+ * Workspace-owner-only: starts the Gmail OAuth consent flow for the
  * caller's ACTIVE workspace. Requests the minimum sending scope
  * (gmail.send) plus the minimum identity scopes needed to read back which
  * Google account was actually authorized (openid + userinfo.email -- see
  * lib/email/gmailClient.ts#getAuthorizedAccountEmail), and binds a
  * short-lived, single-use, database-backed state token (see
  * lib/email/gmailOAuth.ts) to this organization + this user, replacing the
- * previous cookie-only CSRF token (architecture report, item 16).
+ * previous cookie-only CSRF token (architecture report, item 16). A plain
+ * member can use the workspace's already-connected sender to send
+ * certificates, but can never connect/reconnect/disconnect it themselves.
  */
 export async function GET() {
-  const guard = await requireOrganizationAdmin({ rateLimit: { key: "gmail-connect", ...RATE_LIMITS.gmailConnect } });
+  const guard = await requireOrganizationOwner({ rateLimit: { key: "gmail-connect", ...RATE_LIMITS.gmailConnect } });
   if ("response" in guard) return guard.response;
 
   let oauth2Client;

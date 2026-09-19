@@ -23,7 +23,7 @@ export type CampaignRowStatus =
 export type JobType = "generate_pdfs" | "send_emails";
 export type JobStatus = "pending" | "running" | "completed" | "failed";
 export type FontFormat = "ttf" | "otf";
-export type OrganizationRole = "owner" | "admin" | "member";
+export type OrganizationRole = "owner" | "member";
 export type EmailConnectionProvider = "gmail";
 
 export interface Database {
@@ -349,6 +349,10 @@ export interface Database {
       cleanup_rate_limits: {
         Args: Record<PropertyKey, never>;
         Returns: number;
+      };
+      transfer_organization_ownership: {
+        Args: { p_organization_id: string; p_current_owner_id: string; p_new_owner_id: string };
+        Returns: void;
       };
     };
   };

@@ -5,7 +5,7 @@ vi.mock("@/lib/supabase/server", () => ({ createServiceRoleClient: vi.fn() }));
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import {
   removeOrganizationMember,
-  updateOrganizationMemberRole,
+  transferOrganizationOwnership,
   createOrganization,
   deleteOrganization,
   deleteOrganizationSafely,
@@ -15,10 +15,10 @@ interface MemberRow {
   id: string;
   organization_id: string;
   user_id: string;
-  role: "owner" | "admin" | "member";
+  role: "owner" | "member";
 }
 
-function buildMockClient(members: MemberRow[]) {
+function buildMockClient(members: MemberRow[], rpcConfig: { error?: { message: string } | null } = {}) {
   const orgInsertMock = vi.fn(() => ({
     select: () => ({
       single: async () => ({ data: { id: "org-1", name: "Club A" }, error: null }),
@@ -31,6 +31,20 @@ function buildMockClient(members: MemberRow[]) {
     return Promise.resolve({ error: null });
   });
 
+  const rpcMock = vi.fn((fn: string, args: { p_organization_id: string; p_current_owner_id: string; p_new_owner_id: string }) => {
+    if (fn !== "transfer_organization_ownership") throw new Error(`unexpected rpc: ${fn}`);
+    if (rpcConfig.error) return Promise.resolve({ error: rpcConfig.error });
+
+    const current = members.find((m) => m.organization_id === args.p_organization_id && m.user_id === args.p_current_owner_id);
+    const next = members.find((m) => m.organization_id === args.p_organization_id && m.user_id === args.p_new_owner_id);
+    if (!current || current.role !== "owner") return Promise.resolve({ error: { message: "p_current_owner_id is not the current owner of this organization." } });
+    if (!next) return Promise.resolve({ error: { message: "p_new_owner_id is not a member of this organization." } });
+
+    next.role = "owner";
+    current.role = "member";
+    return Promise.resolve({ error: null });
+  });
+
   const from = vi.fn((table: string) => {
     if (table === "organizations") {
       return { insert: orgInsertMock, delete: orgDeleteMock };
@@ -38,33 +52,19 @@ function buildMockClient(members: MemberRow[]) {
     if (table === "organization_members") {
       return {
         insert: memberInsertMock,
-        select: (_cols: string, opts?: { count?: string; head?: boolean }) => {
-          if (opts?.count) {
-            // countOwners-style head query: .select("id", {count}).eq(org).eq(role)
-            const chain = {
-              eq: () => chain,
-              // Resolve the promise lazily once both filters are applied --
-              // simplest correct behavior here is to just compute on final await.
-              then: (resolve: (v: unknown) => void) => {
-                resolve({ count: members.filter((m) => m.role === "owner").length, error: null });
-              },
-            };
-            return chain as unknown as Promise<{ count: number; error: null }>;
-          }
+        select: () => ({
           // getMembership-style: .select("role").eq(org).eq(user).maybeSingle()
-          return {
-            eq: (_col: string, orgOrUser: string) => ({
-              eq: (_col2: string, userOrOrg: string) => ({
-                maybeSingle: async () => {
-                  const match = members.find(
-                    (m) => (m.organization_id === orgOrUser && m.user_id === userOrOrg) || (m.organization_id === userOrOrg && m.user_id === orgOrUser),
-                  );
-                  return { data: match ? { role: match.role } : null, error: null };
-                },
-              }),
+          eq: (_col: string, orgOrUser: string) => ({
+            eq: (_col2: string, userOrOrg: string) => ({
+              maybeSingle: async () => {
+                const match = members.find(
+                  (m) => (m.organization_id === orgOrUser && m.user_id === userOrOrg) || (m.organization_id === userOrOrg && m.user_id === orgOrUser),
+                );
+                return { data: match ? { role: match.role } : null, error: null };
+              },
             }),
-          };
-        },
+          }),
+        }),
         delete: () => ({
           eq: (_col: string, orgId: string) => ({
             eq: (_col2: string, userId: string) => {
@@ -74,21 +74,12 @@ function buildMockClient(members: MemberRow[]) {
             },
           }),
         }),
-        update: (patch: Partial<MemberRow>) => ({
-          eq: (_col: string, orgId: string) => ({
-            eq: (_col2: string, userId: string) => {
-              const row = members.find((m) => m.organization_id === orgId && m.user_id === userId);
-              if (row) Object.assign(row, patch);
-              return Promise.resolve({ error: null });
-            },
-          }),
-        }),
       };
     }
     throw new Error(`unexpected table: ${table}`);
   });
 
-  return { from };
+  return { from, rpc: rpcMock };
 }
 
 beforeEach(() => {
@@ -96,7 +87,7 @@ beforeEach(() => {
 });
 
 describe("removeOrganizationMember", () => {
-  it("removes a plain member with no owner restriction", async () => {
+  it("removes a plain member with no restriction", async () => {
     const members: MemberRow[] = [
       { id: "m1", organization_id: "org-1", user_id: "owner-1", role: "owner" },
       { id: "m2", organization_id: "org-1", user_id: "member-1", role: "member" },
@@ -108,25 +99,16 @@ describe("removeOrganizationMember", () => {
     expect(members).toHaveLength(1);
   });
 
-  it("refuses to remove the last owner", async () => {
-    const members: MemberRow[] = [{ id: "m1", organization_id: "org-1", user_id: "owner-1", role: "owner" }];
-    vi.mocked(createServiceRoleClient).mockReturnValue(buildMockClient(members) as unknown as ReturnType<typeof createServiceRoleClient>);
-
-    const result = await removeOrganizationMember("org-1", "owner-1");
-    expect(result).toEqual({ ok: false, reason: "last_owner" });
-    expect(members).toHaveLength(1);
-  });
-
-  it("allows removing one owner when another owner remains", async () => {
+  it("refuses to remove the owner through this generic endpoint, regardless of who's calling -- ownership must be transferred first", async () => {
     const members: MemberRow[] = [
       { id: "m1", organization_id: "org-1", user_id: "owner-1", role: "owner" },
-      { id: "m2", organization_id: "org-1", user_id: "owner-2", role: "owner" },
+      { id: "m2", organization_id: "org-1", user_id: "member-1", role: "member" },
     ];
     vi.mocked(createServiceRoleClient).mockReturnValue(buildMockClient(members) as unknown as ReturnType<typeof createServiceRoleClient>);
 
     const result = await removeOrganizationMember("org-1", "owner-1");
-    expect(result).toEqual({ ok: true });
-    expect(members).toHaveLength(1);
+    expect(result).toEqual({ ok: false, reason: "owner" });
+    expect(members).toHaveLength(2);
   });
 
   it("returns not_found for a user with no membership row", async () => {
@@ -138,38 +120,72 @@ describe("removeOrganizationMember", () => {
   });
 });
 
-describe("updateOrganizationMemberRole", () => {
-  it("refuses to demote the last owner", async () => {
-    const members: MemberRow[] = [{ id: "m1", organization_id: "org-1", user_id: "owner-1", role: "owner" }];
-    vi.mocked(createServiceRoleClient).mockReturnValue(buildMockClient(members) as unknown as ReturnType<typeof createServiceRoleClient>);
-
-    const result = await updateOrganizationMemberRole("org-1", "owner-1", "member");
-    expect(result).toEqual({ ok: false, reason: "last_owner" });
-    expect(members[0].role).toBe("owner");
-  });
-
-  it("allows demoting an owner when another owner remains", async () => {
+describe("transferOrganizationOwnership", () => {
+  it("promotes the chosen member to owner and demotes the current owner to member, atomically via the RPC", async () => {
     const members: MemberRow[] = [
       { id: "m1", organization_id: "org-1", user_id: "owner-1", role: "owner" },
-      { id: "m2", organization_id: "org-1", user_id: "owner-2", role: "owner" },
+      { id: "m2", organization_id: "org-1", user_id: "member-1", role: "member" },
+    ];
+    const client = buildMockClient(members);
+    vi.mocked(createServiceRoleClient).mockReturnValue(client as unknown as ReturnType<typeof createServiceRoleClient>);
+
+    const result = await transferOrganizationOwnership("org-1", "owner-1", "member-1");
+
+    expect(result).toEqual({ ok: true });
+    expect(members.find((m) => m.user_id === "member-1")?.role).toBe("owner");
+    expect(members.find((m) => m.user_id === "owner-1")?.role).toBe("member");
+    expect(client.rpc).toHaveBeenCalledWith("transfer_organization_ownership", {
+      p_organization_id: "org-1",
+      p_current_owner_id: "owner-1",
+      p_new_owner_id: "member-1",
+    });
+  });
+
+  it("results in exactly one owner after the transfer -- never zero, never two", async () => {
+    const members: MemberRow[] = [
+      { id: "m1", organization_id: "org-1", user_id: "owner-1", role: "owner" },
+      { id: "m2", organization_id: "org-1", user_id: "member-1", role: "member" },
+      { id: "m3", organization_id: "org-1", user_id: "member-2", role: "member" },
     ];
     vi.mocked(createServiceRoleClient).mockReturnValue(buildMockClient(members) as unknown as ReturnType<typeof createServiceRoleClient>);
 
-    const result = await updateOrganizationMemberRole("org-1", "owner-1", "admin");
-    expect(result).toEqual({ ok: true });
-    expect(members[0].role).toBe("admin");
+    await transferOrganizationOwnership("org-1", "owner-1", "member-1");
+
+    const owners = members.filter((m) => m.organization_id === "org-1" && m.role === "owner");
+    expect(owners).toHaveLength(1);
+    expect(owners[0].user_id).toBe("member-1");
   });
 
-  it("allows promoting a member to admin freely", async () => {
+  it("refuses a no-op transfer to the same user, without ever calling the database", async () => {
+    const members: MemberRow[] = [{ id: "m1", organization_id: "org-1", user_id: "owner-1", role: "owner" }];
+    const client = buildMockClient(members);
+    vi.mocked(createServiceRoleClient).mockReturnValue(client as unknown as ReturnType<typeof createServiceRoleClient>);
+
+    const result = await transferOrganizationOwnership("org-1", "owner-1", "owner-1");
+
+    expect(result).toEqual({ ok: false, reason: "same_user" });
+    expect(client.rpc).not.toHaveBeenCalled();
+  });
+
+  it("reports current_owner_mismatch when the caller-supplied 'current owner' isn't actually the owner", async () => {
     const members: MemberRow[] = [
       { id: "m1", organization_id: "org-1", user_id: "owner-1", role: "owner" },
       { id: "m2", organization_id: "org-1", user_id: "member-1", role: "member" },
     ];
     vi.mocked(createServiceRoleClient).mockReturnValue(buildMockClient(members) as unknown as ReturnType<typeof createServiceRoleClient>);
 
-    const result = await updateOrganizationMemberRole("org-1", "member-1", "admin");
-    expect(result).toEqual({ ok: true });
-    expect(members[1].role).toBe("admin");
+    const result = await transferOrganizationOwnership("org-1", "member-1", "owner-1");
+
+    expect(result).toEqual({ ok: false, reason: "current_owner_mismatch" });
+  });
+
+  it("reports new_owner_not_found when the chosen user isn't a member of this organization", async () => {
+    const members: MemberRow[] = [{ id: "m1", organization_id: "org-1", user_id: "owner-1", role: "owner" }];
+    vi.mocked(createServiceRoleClient).mockReturnValue(buildMockClient(members) as unknown as ReturnType<typeof createServiceRoleClient>);
+
+    const result = await transferOrganizationOwnership("org-1", "owner-1", "stranger");
+
+    expect(result).toEqual({ ok: false, reason: "new_owner_not_found" });
   });
 });
 

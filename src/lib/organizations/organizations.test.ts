@@ -3,7 +3,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 vi.mock("@/lib/supabase/server", () => ({ createServiceRoleClient: vi.fn() }));
 
 import { createServiceRoleClient } from "@/lib/supabase/server";
-import { removeOrganizationMember, updateOrganizationMemberRole, createOrganization } from "./organizations";
+import { removeOrganizationMember, updateOrganizationMemberRole, createOrganization, deleteOrganization } from "./organizations";
 
 interface MemberRow {
   id: string;
@@ -187,5 +187,15 @@ describe("createOrganization", () => {
     await createOrganization({ name: "Club A", createdBy: "user-1", ownerUserId: "user-1" });
 
     expect(members).toEqual([{ id: "m-1", organization_id: "org-1", user_id: "user-1", role: "owner" }]);
+  });
+});
+
+describe("deleteOrganization", () => {
+  it("deletes the organization row", async () => {
+    const members: MemberRow[] = [];
+    const client = buildMockClient(members);
+    vi.mocked(createServiceRoleClient).mockReturnValue(client as unknown as ReturnType<typeof createServiceRoleClient>);
+
+    await expect(deleteOrganization("org-1")).resolves.toBeUndefined();
   });
 });

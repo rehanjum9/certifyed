@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requirePlatformAdmin } from "@/lib/auth/organizationGuard";
-import { createOrganization } from "@/lib/organizations/organizations";
+import { createOrganization, deleteOrganization } from "@/lib/organizations/organizations";
 import { createInvite } from "@/lib/organizations/invites";
 import { RATE_LIMITS } from "@/lib/rateLimit";
 
@@ -50,9 +50,20 @@ export async function POST(request: Request) {
   const inviteResult = await createInvite(organization.id, parsed.data.ownerEmail, "owner", guard.user.id, redirectTo);
 
   if (inviteResult.status === "error") {
+    // Don't leave an ownerless, 0-member workspace behind just because the
+    // owner invite failed -- roll back the organization we just created.
+    // Best-effort: if the rollback delete itself fails, the original invite
+    // error is still the more useful thing to report than a second error
+    // about the rollback -- a platform admin re-checking the workspace list
+    // will still notice a stray 0-member org if that happens.
+    try {
+      await deleteOrganization(organization.id);
+    } catch {
+      // swallow -- see comment above
+    }
     return NextResponse.json(
-      { organization, inviteError: inviteResult.error },
-      { status: 201 },
+      { error: `Failed to invite the workspace owner, so the workspace was not created: ${inviteResult.error}` },
+      { status: 502 },
     );
   }
 

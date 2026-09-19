@@ -26,7 +26,7 @@ export function CreateOrganizationForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, ownerEmail }),
       });
-      const body = (await response.json().catch(() => ({}))) as { error?: string; inviteError?: string };
+      const body = (await response.json().catch(() => ({}))) as { error?: string };
 
       if (!response.ok) {
         setStatus("error");
@@ -35,7 +35,7 @@ export function CreateOrganizationForm() {
       }
 
       setStatus("success");
-      setMessage(body.inviteError ? `Workspace created, but the invite failed: ${body.inviteError}` : `Workspace "${name}" created and ${ownerEmail} invited as owner.`);
+      setMessage(`Workspace "${name}" created and ${ownerEmail} invited as owner.`);
       setName("");
       setOwnerEmail("");
       router.refresh();

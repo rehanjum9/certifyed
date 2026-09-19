@@ -96,6 +96,22 @@ export async function createOrganization(input: CreateOrganizationInput): Promis
   return org;
 }
 
+/**
+ * Deletes an organization outright (cascades to organization_members/
+ * organization_invites/email_connections via their FKs -- see
+ * 0007_organizations.sql). Only ever called to roll back a workspace that
+ * failed to acquire a real owner: createOrganization's own ownerUserId
+ * rollback, and /api/admin/organizations' rollback when the owner invite
+ * itself fails (see that route). Never exposed as a general "delete a live
+ * workspace" operation -- no route lets anyone delete a workspace that
+ * already has real members.
+ */
+export async function deleteOrganization(organizationId: string): Promise<void> {
+  const supabase = createServiceRoleClient();
+  const { error } = await supabase.from("organizations").delete().eq("id", organizationId);
+  if (error) throw new Error(`Failed to delete organization: ${error.message}`);
+}
+
 export interface OrganizationWithMemberCount extends OrganizationRow {
   memberCount: number;
 }

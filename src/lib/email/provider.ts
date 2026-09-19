@@ -66,7 +66,9 @@ export function getEmailProviderConfigError(): string | null {
 /**
  * The full, organization-aware pre-flight check a real send needs: platform
  * config first, then (for Gmail) whether THIS organization has connected
- * an account. Used by the campaign email-start/test-email routes instead
+ * an account. Used by the campaign email-start route (both to gate the
+ * actual send and to tell the campaign page's Email Delivery panel whether
+ * to show real delivery controls or "Connect Gmail in Settings") instead
  * of getEmailProviderConfigError alone, so "Gmail is configured on this
  * deployment but Club B never connected an account" is reported precisely
  * -- never silently falls back to any other organization's connection or
@@ -85,10 +87,10 @@ export async function getOrganizationEmailSendError(organizationId: string): Pro
 }
 
 /**
- * The single provider-dispatch entry point every caller (campaign email
- * batches, test-email) uses. This is the only function in the codebase that
- * knows both providers exist -- everything else calls this and never
- * branches on EMAIL_PROVIDER itself.
+ * The single provider-dispatch entry point every real send (campaign email
+ * batches) uses. This is the only function in the codebase that knows both
+ * providers exist -- everything else calls this and never branches on
+ * EMAIL_PROVIDER itself.
  *
  * `context.organizationId` MUST be the campaign's own organization_id --
  * never the caller's currently active workspace (architecture report, item

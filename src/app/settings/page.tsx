@@ -3,7 +3,6 @@ import { resolvePageWorkspaceContext } from "@/lib/organizations/pageContext";
 import { listOrganizationMembers } from "@/lib/organizations/organizations";
 import { getEmailConnectionSummary } from "@/lib/email/connections";
 import { resolveEmailProvider, getEmailProviderConfigError, type EmailProviderName } from "@/lib/email/provider";
-import { maskEmail } from "@/lib/email/mask";
 import { listCustomFonts } from "@/lib/fonts/customFonts";
 import { NoWorkspaceState } from "@/components/organizations/NoWorkspaceState";
 import { InviteMemberForm } from "@/components/settings/InviteMemberForm";
@@ -60,12 +59,6 @@ export default async function SettingsPage() {
   } catch (error) {
     platformProviderError = error instanceof Error ? error.message : "Invalid EMAIL_PROVIDER configuration.";
   }
-
-  // Masked server-side, and only ever rendered into this page's HTML --
-  // never returned from a public API response. Same fixed address used for
-  // every campaign's "Send test email" action, regardless of provider.
-  const rawTestEmail = process.env.RESEND_TEST_EMAIL;
-  const maskedTestEmail = rawTestEmail ? maskEmail(rawTestEmail) : null;
 
   return (
     <PageContainer>
@@ -185,11 +178,6 @@ export default async function SettingsPage() {
                   )}
                 </>
               )}
-
-              <div className="border-t border-slate-100 pt-3">
-                <Row label="Test recipient" value={<span className="font-mono text-xs">{maskedTestEmail ?? "Not configured"}</span>} />
-              </div>
-              <p className="text-xs text-slate-400">Send a safe test email from any campaign&apos;s delivery panel.</p>
             </div>
           </Card>
         </section>

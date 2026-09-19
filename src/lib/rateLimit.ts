@@ -25,7 +25,6 @@ export interface RateLimitResult {
 export const RATE_LIMITS = {
   templateCreate: { limit: 10, windowSeconds: 600 },
   campaignCreate: { limit: 10, windowSeconds: 600 },
-  testEmail: { limit: 5, windowSeconds: 600 },
   emailStart: { limit: 10, windowSeconds: 600 },
   generationStart: { limit: 20, windowSeconds: 600 },
   jobProcess: { limit: 240, windowSeconds: 60 },

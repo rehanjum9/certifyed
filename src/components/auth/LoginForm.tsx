@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -70,7 +71,12 @@ export function LoginForm() {
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="login-password">Password</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="login-password">Password</Label>
+              <Link href="/forgot-password" className="text-xs font-medium text-slate-500 hover:text-slate-700">
+                Forgot password?
+              </Link>
+            </div>
             <Input
               id="login-password"
               type="password"

@@ -11,9 +11,12 @@ import { Alert } from "@/components/ui/Alert";
 import { Spinner } from "@/components/ui/Spinner";
 
 /**
- * The final step of accepting a workspace invite: the user already has a
- * real, verified session at this point (established by
- * InviteLandingClient, or the legacy /auth/confirm route) -- the actual
+ * The final step of TWO separate flows that both land here the same way:
+ * accepting a brand-new workspace invite, and resetting a forgotten
+ * password. Either way, the user already has a real, verified session by
+ * the time this renders -- established by InviteLandingClient (invite) or
+ * /auth/confirm (invite via the legacy token_hash link, or password
+ * recovery) -- this component never knows or cares which. The actual
  * decision logic lives in lib/auth/setPassword.ts (unit-tested directly);
  * this component is just the form/router glue around it. Redirects
  * straight to /dashboard on success -- no separate login step, since the

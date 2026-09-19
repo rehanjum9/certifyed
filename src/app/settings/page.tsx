@@ -8,6 +8,7 @@ import { NoWorkspaceState } from "@/components/organizations/NoWorkspaceState";
 import { InviteMemberForm } from "@/components/settings/InviteMemberForm";
 import { MemberList } from "@/components/settings/MemberList";
 import { TransferOwnershipForm } from "@/components/settings/TransferOwnershipForm";
+import { ChangePasswordForm } from "@/components/settings/ChangePasswordForm";
 import { GmailDisconnectButton } from "@/components/settings/GmailDisconnectButton";
 import { FontsList } from "@/components/settings/FontsList";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -199,6 +200,11 @@ export default async function SettingsPage() {
               <CheckRow label="Protected app access" />
               <CheckRow label="Protected API access" />
               <CheckRow label="Workspace-isolated data" />
+
+              <div className="border-t border-slate-100 pt-4">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Change password</p>
+                <ChangePasswordForm />
+              </div>
             </div>
           </Card>
         </section>

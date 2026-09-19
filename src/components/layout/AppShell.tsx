@@ -11,7 +11,7 @@ import type { LayoutWorkspaceInfo } from "@/lib/organizations/pageContext";
 /** The public marketing site -- open to everyone, gets the public header/footer, never the app sidebar. */
 const PUBLIC_SITE_PATHS = new Set(["/", "/about", "/how-to-use", "/privacy"]);
 /** Renders with no chrome at all (its own centered card) -- not the app shell, not the public header/footer. */
-const CHROMELESS_PATHS = new Set(["/login", "/set-password", "/auth/invite"]);
+const CHROMELESS_PATHS = new Set(["/login", "/forgot-password", "/set-password", "/auth/invite"]);
 
 interface AppShellProps {
   children: ReactNode;

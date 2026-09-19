@@ -8,8 +8,9 @@ import { createServerClient } from "@supabase/ssr";
 // content only).
 const PUBLIC_SITE_PATHS = new Set(["/", "/about", "/how-to-use", "/privacy"]);
 // Viewable only while signed out; an authenticated visitor is sent to the
-// real app instead of the sign-in form.
+// real app instead of these forms.
 const LOGIN_PATH = "/login";
+const SIGNED_OUT_AUTH_PATHS = new Set([LOGIN_PATH, "/forgot-password"]);
 
 /**
  * Single gate for every page in the app: refreshes the Supabase session
@@ -55,21 +56,24 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isApiRoute = pathname.startsWith("/api/");
   const isPublicSitePage = PUBLIC_SITE_PATHS.has(pathname);
-  const isLoginPage = pathname === LOGIN_PATH;
+  // /login and /forgot-password are both signed-out-only forms -- neither
+  // needs (or should show) a real session.
+  const isSignedOutAuthPage = SIGNED_OUT_AUTH_PATHS.has(pathname);
   // /auth/confirm establishes the session itself (via verifyOtp) -- the
   // visitor is never authenticated yet when this request arrives, so it
   // must never be redirected to /login the way other authenticated-app
   // pages are. It performs its own token_hash validation regardless.
   const isAuthRoute = pathname.startsWith("/auth/");
 
-  // An authenticated visitor doesn't need the sign-in form -- send them
-  // straight to the real app. They may still freely browse the public
-  // marketing pages (home/about/how-to-use) while signed in.
-  if (user && isLoginPage) {
+  // An authenticated visitor doesn't need the sign-in/forgot-password
+  // forms -- send them straight to the real app. They may still freely
+  // browse the public marketing pages (home/about/how-to-use) while
+  // signed in.
+  if (user && isSignedOutAuthPage) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
-  if (!user && !isApiRoute && !isAuthRoute && !isPublicSitePage && !isLoginPage) {
+  if (!user && !isApiRoute && !isAuthRoute && !isPublicSitePage && !isSignedOutAuthPage) {
     const loginUrl = new URL(LOGIN_PATH, request.url);
     loginUrl.searchParams.set("redirectTo", pathname);
     return NextResponse.redirect(loginUrl);

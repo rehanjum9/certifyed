@@ -44,4 +44,19 @@ describe("performSetPassword", () => {
 
     expect(outcome.kind).toBe("auth_error");
   });
+
+  it("succeeds identically for a workspace owner's own session and a plain member's own session -- there is no role parameter anywhere in this call, so neither can ever be treated differently or point at someone else's account", async () => {
+    const ownerUpdateUser = vi.fn().mockResolvedValue({ error: null });
+    const memberUpdateUser = vi.fn().mockResolvedValue({ error: null });
+
+    const ownerOutcome = await performSetPassword("owners-new-password", "owners-new-password", { updateUser: ownerUpdateUser });
+    const memberOutcome = await performSetPassword("members-new-password", "members-new-password", { updateUser: memberUpdateUser });
+
+    expect(ownerOutcome).toEqual({ kind: "success" });
+    expect(memberOutcome).toEqual({ kind: "success" });
+    // Each call only ever touched its OWN updateUser binding (i.e. its own
+    // Supabase session) -- never the other's.
+    expect(ownerUpdateUser).toHaveBeenCalledTimes(1);
+    expect(memberUpdateUser).toHaveBeenCalledTimes(1);
+  });
 });

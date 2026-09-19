@@ -55,6 +55,23 @@ describe("proxy (auth gate)", () => {
     expect(response.headers.get("location")).toBe("http://localhost:3000/dashboard");
   });
 
+  it("lets an unauthenticated visitor reach /forgot-password without redirecting", async () => {
+    vi.mocked(createServerClient).mockReturnValue(mockSupabaseClient(null) as never);
+
+    const response = await proxy(new NextRequest("http://localhost:3000/forgot-password"));
+
+    expect(response.headers.get("location")).toBeNull();
+  });
+
+  it("redirects an authenticated visitor away from /forgot-password to the dashboard -- they're already signed in", async () => {
+    vi.mocked(createServerClient).mockReturnValue(mockSupabaseClient({ id: "operator-1" }) as never);
+
+    const response = await proxy(new NextRequest("http://localhost:3000/forgot-password"));
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe("http://localhost:3000/dashboard");
+  });
+
   it.each(["/", "/about", "/how-to-use", "/privacy"])("lets an unauthenticated visitor reach the public page %s without redirecting", async (path) => {
     vi.mocked(createServerClient).mockReturnValue(mockSupabaseClient(null) as never);
 

@@ -17,7 +17,8 @@ export default function SetPasswordPage() {
           <p className="font-mono text-xs font-semibold uppercase tracking-wide text-emerald-600">&gt; welcome_</p>
           <h1 className="mt-2 text-xl font-semibold tracking-tight text-slate-900">Set your password</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Choose a password for your CERTIFYED_ account to finish joining your workspace.
+            Choose a password for your CERTIFYED_ account. This is used both for a brand-new workspace invitation and
+            for resetting a forgotten password.
           </p>
         </div>
 

@@ -1,9 +1,20 @@
+// Fixed locale + timeZone -- toLocaleDateString(undefined, ...) previously
+// used the RUNTIME's own default locale, which differs between the Node.js
+// server (however that host is configured) and the browser (the visitor's
+// own navigator.language), producing different text for the same
+// timestamp (e.g. "18 Sept 2026" vs "Sep 18, 2026") -- a React hydration
+// mismatch, since this is called from both server- and client-rendered
+// output. Pinning both locale and timeZone makes the result depend only on
+// the input timestamp, identical on every server and every browser.
+const DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
 export function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
+  return DATE_FORMATTER.format(new Date(iso));
 }
 
 const RELATIVE_UNITS: [string, number][] = [

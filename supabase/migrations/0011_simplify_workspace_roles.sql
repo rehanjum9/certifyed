@@ -120,7 +120,20 @@ declare
   org_still_exists boolean;
   owner_count integer;
 begin
-  target_org_id := coalesce(new.organization_id, old.organization_id);
+  -- NEW/OLD availability depends on tg_op, and this trigger fires on all
+  -- three: NEW is unassigned for DELETE, OLD is unassigned for INSERT.
+  -- coalesce(new.organization_id, old.organization_id) is NOT safe here
+  -- (unlike prevent_last_owner_removal's own coalesce, which lists OLD
+  -- first and never fires on INSERT, so it never actually needs to touch
+  -- an unassigned NEW) -- PL/pgSQL raises the error record 'new' is not
+  -- assigned yet the moment new.organization_id is evaluated on a DELETE,
+  -- before COALESCE ever gets a chance to fall back to OLD. Branch on
+  -- tg_op explicitly instead: NEW for INSERT/UPDATE, OLD for DELETE.
+  if tg_op = 'DELETE' then
+    target_org_id := old.organization_id;
+  else
+    target_org_id := new.organization_id;
+  end if;
 
   select exists(select 1 from public.organizations where id = target_org_id) into org_still_exists;
   if not org_still_exists then

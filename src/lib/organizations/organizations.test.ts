@@ -3,7 +3,13 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 vi.mock("@/lib/supabase/server", () => ({ createServiceRoleClient: vi.fn() }));
 
 import { createServiceRoleClient } from "@/lib/supabase/server";
-import { removeOrganizationMember, updateOrganizationMemberRole, createOrganization, deleteOrganization } from "./organizations";
+import {
+  removeOrganizationMember,
+  updateOrganizationMemberRole,
+  createOrganization,
+  deleteOrganization,
+  deleteOrganizationSafely,
+} from "./organizations";
 
 interface MemberRow {
   id: string;
@@ -197,5 +203,113 @@ describe("deleteOrganization", () => {
     vi.mocked(createServiceRoleClient).mockReturnValue(client as unknown as ReturnType<typeof createServiceRoleClient>);
 
     await expect(deleteOrganization("org-1")).resolves.toBeUndefined();
+  });
+});
+
+interface DeleteSafelyConfig {
+  organizationExists?: boolean;
+  templatesCount?: number;
+  campaignsCount?: number;
+  fontsCount?: number;
+}
+
+function buildDeleteSafelyMockClient(config: DeleteSafelyConfig) {
+  const deleteUser = vi.fn();
+  const orgDeleteMock = vi.fn(() => ({ eq: async () => ({ error: null }) }));
+  const countsByTable: Record<string, number> = {
+    templates: config.templatesCount ?? 0,
+    campaigns: config.campaignsCount ?? 0,
+    fonts: config.fontsCount ?? 0,
+  };
+
+  const from = vi.fn((table: string) => {
+    if (table === "organizations") {
+      return {
+        select: () => ({
+          eq: () => ({
+            maybeSingle: async () => ({
+              data:
+                config.organizationExists === false
+                  ? null
+                  : { id: "org-1", name: "Club B", slug: null, created_by: "platform-admin-1", created_at: "now", updated_at: "now" },
+              error: null,
+            }),
+          }),
+        }),
+        delete: orgDeleteMock,
+      };
+    }
+    if (table === "templates" || table === "campaigns" || table === "fonts") {
+      return {
+        select: () => ({
+          eq: async () => ({ count: countsByTable[table], error: null }),
+        }),
+      };
+    }
+    throw new Error(`unexpected table: ${table}`);
+  });
+
+  return { from, auth: { admin: { deleteUser } }, deleteUser, orgDeleteMock };
+}
+
+describe("deleteOrganizationSafely", () => {
+  it("deletes an empty workspace (no templates, campaigns, or fonts)", async () => {
+    const client = buildDeleteSafelyMockClient({});
+    vi.mocked(createServiceRoleClient).mockReturnValue(client as unknown as ReturnType<typeof createServiceRoleClient>);
+
+    const result = await deleteOrganizationSafely("org-1");
+
+    expect(result).toEqual({ ok: true });
+    expect(client.orgDeleteMock).toHaveBeenCalled();
+  });
+
+  it("blocks deletion when the workspace has templates", async () => {
+    const client = buildDeleteSafelyMockClient({ templatesCount: 2 });
+    vi.mocked(createServiceRoleClient).mockReturnValue(client as unknown as ReturnType<typeof createServiceRoleClient>);
+
+    const result = await deleteOrganizationSafely("org-1");
+
+    expect(result).toEqual({ ok: false, reason: "has_resources", counts: { templates: 2, campaigns: 0, fonts: 0 } });
+    expect(client.orgDeleteMock).not.toHaveBeenCalled();
+  });
+
+  it("blocks deletion when the workspace has campaigns", async () => {
+    const client = buildDeleteSafelyMockClient({ campaignsCount: 1 });
+    vi.mocked(createServiceRoleClient).mockReturnValue(client as unknown as ReturnType<typeof createServiceRoleClient>);
+
+    const result = await deleteOrganizationSafely("org-1");
+
+    expect(result).toEqual({ ok: false, reason: "has_resources", counts: { templates: 0, campaigns: 1, fonts: 0 } });
+    expect(client.orgDeleteMock).not.toHaveBeenCalled();
+  });
+
+  it("blocks deletion when the workspace has custom fonts", async () => {
+    const client = buildDeleteSafelyMockClient({ fontsCount: 3 });
+    vi.mocked(createServiceRoleClient).mockReturnValue(client as unknown as ReturnType<typeof createServiceRoleClient>);
+
+    const result = await deleteOrganizationSafely("org-1");
+
+    expect(result).toEqual({ ok: false, reason: "has_resources", counts: { templates: 0, campaigns: 0, fonts: 3 } });
+    expect(client.orgDeleteMock).not.toHaveBeenCalled();
+  });
+
+  it("reports not_found for a workspace id that doesn't exist, without counting anything", async () => {
+    const client = buildDeleteSafelyMockClient({ organizationExists: false });
+    vi.mocked(createServiceRoleClient).mockReturnValue(client as unknown as ReturnType<typeof createServiceRoleClient>);
+
+    const result = await deleteOrganizationSafely("org-missing");
+
+    expect(result).toEqual({ ok: false, reason: "not_found" });
+    expect(client.orgDeleteMock).not.toHaveBeenCalled();
+  });
+
+  it("never deletes the Supabase Auth user account for an empty workspace it does delete", async () => {
+    const client = buildDeleteSafelyMockClient({});
+    vi.mocked(createServiceRoleClient).mockReturnValue(client as unknown as ReturnType<typeof createServiceRoleClient>);
+
+    const result = await deleteOrganizationSafely("org-1");
+
+    expect(result).toEqual({ ok: true });
+    expect(client.deleteUser).not.toHaveBeenCalled();
   });
 });

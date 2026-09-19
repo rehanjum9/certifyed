@@ -131,6 +131,96 @@ export async function acceptInvite(invite: OrganizationInviteRow, userId: string
   if (error) throw new Error(`Failed to mark invite accepted: ${error.message}`);
 }
 
+/** The most recent invite ever created for an organization, regardless of accepted/expired status -- what the platform-admin "pending owner invite" actions (see /admin/organizations) resolve against. Distinct from findPendingInviteForEmail (keyed by email, unaccepted-and-unexpired only, for the acceptance flow); this is keyed by organization and returns whatever the latest row is so the admin UI can tell "no invite ever sent" apart from "already accepted" apart from "still pending." */
+export async function findLatestInviteForOrganization(organizationId: string): Promise<OrganizationInviteRow | null> {
+  const supabase = createServiceRoleClient();
+  const { data, error } = await supabase
+    .from("organization_invites")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw new Error(`Failed to load invite: ${error.message}`);
+  return data;
+}
+
+/** Bulk sibling of findLatestInviteForOrganization for the admin workspace listing -- one query for every organization on the page instead of one round-trip per row. Organizations with no invite at all are simply absent from the returned map. */
+export async function listLatestInvitesForOrganizations(organizationIds: string[]): Promise<Map<string, OrganizationInviteRow>> {
+  if (organizationIds.length === 0) return new Map();
+
+  const supabase = createServiceRoleClient();
+  const { data, error } = await supabase
+    .from("organization_invites")
+    .select("*")
+    .in("organization_id", organizationIds)
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(`Failed to load invites: ${error.message}`);
+
+  const latestByOrganization = new Map<string, OrganizationInviteRow>();
+  for (const row of data ?? []) {
+    if (!latestByOrganization.has(row.organization_id)) {
+      latestByOrganization.set(row.organization_id, row);
+    }
+  }
+  return latestByOrganization;
+}
+
+export type CancelInviteResult = { status: "cancelled" } | { status: "already_accepted" } | { status: "not_found" };
+
+/**
+ * Platform-admin "Cancel pending owner invite" (see
+ * /api/admin/organizations/[organizationId]/invite). Deletes only the
+ * organization_invites row itself -- never touches Supabase Auth (the
+ * invited email's Auth user, if Supabase already created one in its
+ * "invited" state, is left alone; it simply has no matching pending invite
+ * to ever complete) and never removes an actual membership. Refuses to
+ * cancel an already-accepted invite -- that's real membership history, not
+ * a pending request waiting to be withdrawn.
+ */
+export async function cancelPendingInvite(organizationId: string): Promise<CancelInviteResult> {
+  const invite = await findLatestInviteForOrganization(organizationId);
+  if (!invite) return { status: "not_found" };
+  if (invite.accepted_at) return { status: "already_accepted" };
+
+  const supabase = createServiceRoleClient();
+  const { error } = await supabase.from("organization_invites").delete().eq("id", invite.id);
+  if (error) throw new Error(`Failed to cancel invite: ${error.message}`);
+
+  return { status: "cancelled" };
+}
+
+export type ResendInviteResult = { status: "resent" } | { status: "already_accepted" } | { status: "not_found" } | { status: "error"; error: string };
+
+/**
+ * Platform-admin "Resend pending owner invite" (see
+ * /api/admin/organizations/[organizationId]/invite). Re-sends the same
+ * Supabase Auth invite email to the same address and role, then extends
+ * the EXISTING organization_invites row's expiry -- an UPDATE, never an
+ * INSERT -- so repeated resends can never accumulate duplicate active
+ * invite rows for one organization. Refuses to resend an already-accepted
+ * invite (nothing pending left to resend).
+ */
+export async function resendPendingInvite(organizationId: string, redirectTo: string): Promise<ResendInviteResult> {
+  const invite = await findLatestInviteForOrganization(organizationId);
+  if (!invite) return { status: "not_found" };
+  if (invite.accepted_at) return { status: "already_accepted" };
+
+  const supabase = createServiceRoleClient();
+  const { error: inviteError } = await supabase.auth.admin.inviteUserByEmail(invite.email, { redirectTo });
+  if (inviteError) return { status: "error", error: inviteError.message };
+
+  const { error: updateError } = await supabase
+    .from("organization_invites")
+    .update({ expires_at: new Date(Date.now() + INVITE_EXPIRY_MS).toISOString() })
+    .eq("id", invite.id);
+  if (updateError) throw new Error(`Failed to refresh invite: ${updateError.message}`);
+
+  return { status: "resent" };
+}
+
 export type FinalizeInviteResult =
   | { status: "accepted"; organizationId: string }
   /** No pending invite matched, but the user already belongs to at least one organization -- a harmless re-visit of an already-consumed link (e.g. the browser back button, or a double-click), not an error. */

@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
 import { getAuthenticatedPageUser } from "@/lib/organizations/pageContext";
 import { listAllOrganizations } from "@/lib/organizations/organizations";
+import { listLatestInvitesForOrganizations } from "@/lib/organizations/invites";
 import { CreateOrganizationForm } from "@/components/admin/CreateOrganizationForm";
+import { WorkspaceActionsMenu } from "@/components/admin/WorkspaceActionsMenu";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Card } from "@/components/ui/Card";
 import { formatDate } from "@/lib/format";
@@ -26,6 +28,7 @@ export default async function AdminOrganizationsPage() {
   if (!user.isPlatformAdmin) notFound();
 
   const organizations = await listAllOrganizations();
+  const latestInvites = await listLatestInvitesForOrganizations(organizations.map((org) => org.id));
 
   return (
     <PageContainer>
@@ -52,17 +55,30 @@ export default async function AdminOrganizationsPage() {
             <p className="text-sm text-slate-500">No workspaces yet.</p>
           ) : (
             <div className="flex flex-col divide-y divide-slate-100 rounded-md border border-slate-200 bg-white">
-              {organizations.map((org) => (
-                <div key={org.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-slate-900">{org.name}</p>
-                    <p className="text-xs text-slate-400">created {formatDate(org.created_at)}</p>
+              {organizations.map((org) => {
+                const invite = latestInvites.get(org.id);
+                return (
+                  <div key={org.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-slate-900">{org.name}</p>
+                      <p className="text-xs text-slate-400">
+                        created {formatDate(org.created_at)}
+                        {invite && !invite.accepted_at && <span className="ml-2 text-amber-600">invite pending ({invite.email})</span>}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-3">
+                      <span className="font-mono text-xs text-slate-500">
+                        {org.memberCount} member{org.memberCount === 1 ? "" : "s"}
+                      </span>
+                      <WorkspaceActionsMenu
+                        organizationId={org.id}
+                        organizationName={org.name}
+                        pendingInvite={invite ? { email: invite.email, acceptedAt: invite.accepted_at } : null}
+                      />
+                    </div>
                   </div>
-                  <span className="shrink-0 font-mono text-xs text-slate-500">
-                    {org.memberCount} member{org.memberCount === 1 ? "" : "s"}
-                  </span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </section>

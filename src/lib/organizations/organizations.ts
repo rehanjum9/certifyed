@@ -98,18 +98,84 @@ export async function createOrganization(input: CreateOrganizationInput): Promis
 
 /**
  * Deletes an organization outright (cascades to organization_members/
- * organization_invites/email_connections via their FKs -- see
- * 0007_organizations.sql). Only ever called to roll back a workspace that
- * failed to acquire a real owner: createOrganization's own ownerUserId
- * rollback, and /api/admin/organizations' rollback when the owner invite
- * itself fails (see that route). Never exposed as a general "delete a live
- * workspace" operation -- no route lets anyone delete a workspace that
- * already has real members.
+ * organization_invites/email_connections/gmail_oauth_states via their FKs
+ * -- see 0007_organizations.sql). NEVER touches Supabase Auth -- no user
+ * account is ever deleted by this, so the same email remains usable for a
+ * future invite/workspace. Deliberately does NOT cascade to
+ * templates/campaigns/fonts (0008_organization_ownership.sql gives those a
+ * plain FK with no ON DELETE clause -- Postgres's default NO ACTION/RESTRICT
+ * behavior -- so a delete would fail loudly if any existed; see
+ * deleteOrganizationSafely, which checks first and never even attempts it).
+ *
+ * Two callers, both rollback/cleanup of a workspace that never got (or
+ * lost) a real, resourced owner: createOrganization's own ownerUserId
+ * rollback, /api/admin/organizations' rollback when the owner invite
+ * itself fails, and deleteOrganizationSafely below (the platform-admin
+ * "Delete workspace" action, for OLD orphaned/test workspaces already in
+ * the database). Never called directly from a route -- every route goes
+ * through deleteOrganizationSafely's resource check first.
  */
 export async function deleteOrganization(organizationId: string): Promise<void> {
   const supabase = createServiceRoleClient();
   const { error } = await supabase.from("organizations").delete().eq("id", organizationId);
   if (error) throw new Error(`Failed to delete organization: ${error.message}`);
+}
+
+export interface OrganizationResourceCounts {
+  templates: number;
+  campaigns: number;
+  fonts: number;
+}
+
+async function countOrganizationRows(
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  table: "templates" | "campaigns" | "fonts",
+  organizationId: string,
+): Promise<number> {
+  const { count, error } = await supabase.from(table).select("id", { count: "exact", head: true }).eq("organization_id", organizationId);
+  if (error) throw new Error(`Failed to count ${table}: ${error.message}`);
+  return count ?? 0;
+}
+
+/** The platform-admin "Delete workspace" resource check (see /admin/organizations): counts only, never row content -- listAllOrganizations already documents why platform admin never sees a workspace's actual template/campaign/font content, and this preserves that. */
+export async function getOrganizationResourceCounts(organizationId: string): Promise<OrganizationResourceCounts> {
+  const supabase = createServiceRoleClient();
+  const [templates, campaigns, fonts] = await Promise.all([
+    countOrganizationRows(supabase, "templates", organizationId),
+    countOrganizationRows(supabase, "campaigns", organizationId),
+    countOrganizationRows(supabase, "fonts", organizationId),
+  ]);
+  return { templates, campaigns, fonts };
+}
+
+export type DeleteOrganizationSafelyResult =
+  | { ok: true }
+  | { ok: false; reason: "not_found" }
+  | { ok: false; reason: "has_resources"; counts: OrganizationResourceCounts };
+
+/**
+ * Platform-admin "Delete workspace" (see /api/admin/organizations/[organizationId]).
+ * Blocks outright if the organization owns any templates, campaigns, or
+ * custom fonts -- this app never cascade-deletes certificate/campaign
+ * data via a workspace-cleanup action; an operator who actually wants that
+ * gone must delete those resources individually first, through the
+ * ordinary workspace UI. Safe for the common case this action exists for:
+ * an old orphaned or failed-invite test workspace with zero real usage
+ * (organization_members/organization_invites/email_connections/
+ * gmail_oauth_states all cascade harmlessly -- see deleteOrganization).
+ * Never deletes a Supabase Auth user.
+ */
+export async function deleteOrganizationSafely(organizationId: string): Promise<DeleteOrganizationSafelyResult> {
+  const existing = await getOrganization(organizationId);
+  if (!existing) return { ok: false, reason: "not_found" };
+
+  const counts = await getOrganizationResourceCounts(organizationId);
+  if (counts.templates > 0 || counts.campaigns > 0 || counts.fonts > 0) {
+    return { ok: false, reason: "has_resources", counts };
+  }
+
+  await deleteOrganization(organizationId);
+  return { ok: true };
 }
 
 export interface OrganizationWithMemberCount extends OrganizationRow {

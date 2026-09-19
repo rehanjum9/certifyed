@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Certificate Generator",
-  description: "Bulk certificate generation from SVG templates and Excel rosters",
+  title: "CERTIFYED_",
+  description: "Multi-workspace certificate generation and delivery from SVG templates and Excel/CSV rosters",
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {

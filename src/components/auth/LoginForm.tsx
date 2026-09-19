@@ -32,7 +32,20 @@ export function LoginForm() {
         return;
       }
 
-      const redirectTo = searchParams.get("redirectTo") || "/dashboard";
+      // Only ever a same-origin path, never an absolute/protocol-relative
+      // URL an attacker could set via a crafted /login?redirectTo=... link
+      // -- defense in depth (Next.js's client-side router.push can't
+      // actually navigate cross-origin regardless, since it's built on
+      // history.pushState, but this keeps the value honest either way).
+      // Backslashes are rejected too: some URL parsers normalize a leading
+      // "/\" into "//", which browsers then treat as protocol-relative.
+      const requestedRedirect = searchParams.get("redirectTo");
+      const isSafeRedirect =
+        !!requestedRedirect &&
+        requestedRedirect.startsWith("/") &&
+        !requestedRedirect.startsWith("//") &&
+        !requestedRedirect.includes("\\");
+      const redirectTo = isSafeRedirect ? requestedRedirect : "/dashboard";
       router.push(redirectTo);
       router.refresh();
     } catch {

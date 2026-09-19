@@ -12,10 +12,11 @@ export interface RateLimitResult {
 }
 
 /**
- * Per-operation limits for the single-operator MVP. Keyed by operation name
- * only -- callers combine this with the caller's user id to form the actual
- * rate-limit key (see guardApiRoute), so each operator is limited
- * independently per operation, not globally across the whole app.
+ * Per-operation limits. Keyed by operation name only -- callers combine
+ * this with the caller's user id to form the actual rate-limit key (see
+ * guardApiRoute), so each signed-in user is limited independently per
+ * operation and per account, never globally across the whole app or
+ * shared across a workspace's other members.
  *
  * jobProcess is deliberately generous: the browser polling loop
  * (GenerationPanel/EmailDeliveryPanel) legitimately calls this route every

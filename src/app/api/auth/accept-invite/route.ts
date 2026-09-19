@@ -42,14 +42,24 @@ export async function POST() {
   }
 
   if (result.status === "accepted") {
-    const cookieStore = await cookies();
-    cookieStore.set(ACTIVE_ORG_COOKIE, result.organizationId, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: ACTIVE_ORG_COOKIE_MAX_AGE_SECONDS,
-      path: "/",
-    });
+    // Best-effort: this cookie is only a hint (pickActiveMembership always
+    // re-validates it against the caller's real memberships and falls back
+    // to their first membership otherwise -- see
+    // lib/organizations/activeWorkspace.ts). A failure here must never turn
+    // an already-successful membership grant into an error response and
+    // strand the invited user before they've even set a password.
+    try {
+      const cookieStore = await cookies();
+      cookieStore.set(ACTIVE_ORG_COOKIE, result.organizationId, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: ACTIVE_ORG_COOKIE_MAX_AGE_SECONDS,
+        path: "/",
+      });
+    } catch {
+      // swallow -- see comment above
+    }
   }
 
   return NextResponse.json({ status: result.status });

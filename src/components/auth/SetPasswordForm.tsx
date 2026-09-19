@@ -3,22 +3,21 @@
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
+import { performSetPassword, MIN_PASSWORD_LENGTH } from "@/lib/auth/setPassword";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Label, Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { Spinner } from "@/components/ui/Spinner";
 
-const MIN_PASSWORD_LENGTH = 8;
-
 /**
- * The final step of accepting a workspace invite (see
- * src/app/auth/confirm/route.ts): the user already has a real, verified
- * session at this point (that route set the session cookie before
- * redirecting here) -- this form only ever calls
- * supabase.auth.updateUser({ password }), never signUp/signIn, so it can
- * never itself create a new account. That's the only account-creation
- * path this app has, and it's gated entirely by a Supabase Auth invite.
+ * The final step of accepting a workspace invite: the user already has a
+ * real, verified session at this point (established by
+ * InviteLandingClient, or the legacy /auth/confirm route) -- the actual
+ * decision logic lives in lib/auth/setPassword.ts (unit-tested directly);
+ * this component is just the form/router glue around it. Redirects
+ * straight to /dashboard on success -- no separate login step, since the
+ * session set here already is the account's real session going forward.
  */
 export function SetPasswordForm() {
   const router = useRouter();
@@ -30,35 +29,21 @@ export function SetPasswordForm() {
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
-
-    if (password.length < MIN_PASSWORD_LENGTH) {
-      setStatus("error");
-      setError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
-      return;
-    }
-    if (password !== confirmPassword) {
-      setStatus("error");
-      setError("Passwords do not match.");
-      return;
-    }
-
     setStatus("loading");
-    try {
-      const supabase = createBrowserSupabaseClient();
-      const { error: updateError } = await supabase.auth.updateUser({ password });
 
-      if (updateError) {
-        setStatus("error");
-        setError(updateError.message || "Failed to set your password. The invite link may have expired -- ask for a new one.");
-        return;
-      }
+    const supabase = createBrowserSupabaseClient();
+    const outcome = await performSetPassword(password, confirmPassword, {
+      updateUser: (newPassword) => supabase.auth.updateUser({ password: newPassword }),
+    });
 
-      router.push("/dashboard");
-      router.refresh();
-    } catch {
+    if (outcome.kind !== "success") {
       setStatus("error");
-      setError("Failed to set your password. Check your connection and try again.");
+      setError(outcome.message);
+      return;
     }
+
+    router.push("/dashboard");
+    router.refresh();
   }
 
   return (

@@ -69,6 +69,20 @@ describe("POST /api/auth/accept-invite", () => {
     expect(cookieSetMock).not.toHaveBeenCalled();
   });
 
+  it("still returns 200 'accepted' even if setting the active-workspace cookie itself throws -- a non-critical cookie failure must never strand an invited user", async () => {
+    vi.mocked(guardApiRoute).mockResolvedValue({ user: { id: "user-1", email: "person@club.example" } });
+    vi.mocked(finalizeInviteAcceptance).mockResolvedValue({ status: "accepted", organizationId: "org-a" });
+    cookieSetMock.mockImplementationOnce(() => {
+      throw new Error("cookies() unavailable in this context");
+    });
+
+    const response = await POST();
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({ status: "accepted" });
+  });
+
   it("rejects when the authenticated session somehow has no email, without calling finalizeInviteAcceptance", async () => {
     vi.mocked(guardApiRoute).mockResolvedValue({ user: { id: "user-1", email: null } });
 

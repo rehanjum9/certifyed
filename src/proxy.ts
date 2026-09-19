@@ -4,8 +4,9 @@ import { createServerClient } from "@supabase/ssr";
 // Freely viewable by anyone, signed in or not -- never redirected away
 // either direction. Real campaign/template/recipient data must never be
 // fetched from these routes (see src/app/page.tsx, src/app/about/page.tsx,
-// src/app/how-to-use/page.tsx -- all static/demo content only).
-const PUBLIC_SITE_PATHS = new Set(["/", "/about", "/how-to-use"]);
+// src/app/how-to-use/page.tsx, src/app/privacy/page.tsx -- all static/demo
+// content only).
+const PUBLIC_SITE_PATHS = new Set(["/", "/about", "/how-to-use", "/privacy"]);
 // Viewable only while signed out; an authenticated visitor is sent to the
 // real app instead of the sign-in form.
 const LOGIN_PATH = "/login";

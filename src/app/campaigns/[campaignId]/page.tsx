@@ -6,6 +6,9 @@ import { computeCampaignProgress } from "@/lib/campaigns/generation";
 import { getLatestGenerationJob } from "@/lib/campaigns/jobs";
 import { computeEmailProgress } from "@/lib/campaigns/emailDelivery";
 import { getLatestEmailJob } from "@/lib/campaigns/emailJobs";
+import { getOrganizationEmailSendError } from "@/lib/email/provider";
+import { resolvePageWorkspaceContext } from "@/lib/organizations/pageContext";
+import { NoWorkspaceState } from "@/components/organizations/NoWorkspaceState";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -13,7 +16,6 @@ import { DataTable, DataTableHead, DataTableTh, DataTableBody, DataTableRow, Dat
 import { GenerationPanel } from "@/components/campaigns/GenerationPanel";
 import { EmailDeliveryPanel } from "@/components/campaigns/EmailDeliveryPanel";
 import { formatDate } from "@/lib/format";
-import { maskEmail } from "@/lib/email/mask";
 import type { BadgeVariant } from "@/components/ui/Badge";
 
 // Always reflects the current DB/storage state; never statically cached.
@@ -36,26 +38,25 @@ function campaignStatusVariant(status: string): BadgeVariant {
 export default async function CampaignDetailPage({
   params,
 }: PageProps<"/campaigns/[campaignId]">) {
+  const context = await resolvePageWorkspaceContext();
+  if ("noWorkspace" in context) return <NoWorkspaceState />;
+
   const { campaignId } = await params;
-  const campaign = await getCampaign(campaignId);
+  const campaign = await getCampaign(campaignId, context.organizationId);
 
   if (!campaign) {
     notFound();
   }
 
-  const [template, rows, progress, job, emailProgress, emailJob] = await Promise.all([
-    getTemplate(campaign.template_id),
+  const [template, rows, progress, job, emailProgress, emailJob, emailSendBlockedReason] = await Promise.all([
+    getTemplate(campaign.template_id, context.organizationId),
     listCampaignRows(campaignId),
     computeCampaignProgress(campaignId),
     getLatestGenerationJob(campaignId),
     computeEmailProgress(campaignId),
     getLatestEmailJob(campaignId),
+    getOrganizationEmailSendError(context.organizationId),
   ]);
-
-  // Masked server-side, and only ever rendered into this page's HTML -- never
-  // returned from a public API response. See the P0 security report.
-  const rawTestEmail = process.env.RESEND_TEST_EMAIL;
-  const maskedTestEmail = rawTestEmail ? maskEmail(rawTestEmail) : null;
 
   return (
     <PageContainer>
@@ -107,7 +108,7 @@ export default async function CampaignDetailPage({
                     : null
                 }
                 initialProgress={emailProgress}
-                maskedTestEmail={maskedTestEmail}
+                emailSendBlockedReason={emailSendBlockedReason}
               />
             </div>
           </Card>

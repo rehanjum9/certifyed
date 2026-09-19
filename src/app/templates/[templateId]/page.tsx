@@ -2,6 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getTemplate, downloadTemplateSvg } from "@/lib/templates";
 import { listTemplateFields } from "@/lib/templateFields";
+import { resolvePageWorkspaceContext } from "@/lib/organizations/pageContext";
+import { NoWorkspaceState } from "@/components/organizations/NoWorkspaceState";
 import { SvgPreview } from "@/components/templates/SvgPreview";
 import { Badge } from "@/components/ui/Badge";
 import { buttonClassName } from "@/components/ui/Button";
@@ -14,8 +16,11 @@ export const dynamic = "force-dynamic";
 export default async function TemplateDetailPage({
   params,
 }: PageProps<"/templates/[templateId]">) {
+  const context = await resolvePageWorkspaceContext();
+  if ("noWorkspace" in context) return <NoWorkspaceState />;
+
   const { templateId } = await params;
-  const template = await getTemplate(templateId);
+  const template = await getTemplate(templateId, context.organizationId);
 
   if (!template) {
     notFound();

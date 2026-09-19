@@ -12,10 +12,11 @@ export interface RateLimitResult {
 }
 
 /**
- * Per-operation limits for the single-operator MVP. Keyed by operation name
- * only -- callers combine this with the caller's user id to form the actual
- * rate-limit key (see guardApiRoute), so each operator is limited
- * independently per operation, not globally across the whole app.
+ * Per-operation limits. Keyed by operation name only -- callers combine
+ * this with the caller's user id to form the actual rate-limit key (see
+ * guardApiRoute), so each signed-in user is limited independently per
+ * operation and per account, never globally across the whole app or
+ * shared across a workspace's other members.
  *
  * jobProcess is deliberately generous: the browser polling loop
  * (GenerationPanel/EmailDeliveryPanel) legitimately calls this route every
@@ -25,7 +26,6 @@ export interface RateLimitResult {
 export const RATE_LIMITS = {
   templateCreate: { limit: 10, windowSeconds: 600 },
   campaignCreate: { limit: 10, windowSeconds: 600 },
-  testEmail: { limit: 5, windowSeconds: 600 },
   emailStart: { limit: 10, windowSeconds: 600 },
   generationStart: { limit: 20, windowSeconds: 600 },
   jobProcess: { limit: 240, windowSeconds: 60 },
@@ -33,6 +33,16 @@ export const RATE_LIMITS = {
   retryEmail: { limit: 10, windowSeconds: 600 },
   fontUpload: { limit: 20, windowSeconds: 600 },
   fontDelete: { limit: 20, windowSeconds: 600 },
+  organizationCreate: { limit: 20, windowSeconds: 600 },
+  invite: { limit: 20, windowSeconds: 600 },
+  gmailConnect: { limit: 10, windowSeconds: 600 },
+  gmailDisconnect: { limit: 10, windowSeconds: 600 },
+  workspaceSwitch: { limit: 60, windowSeconds: 600 },
+  acceptInvite: { limit: 10, windowSeconds: 600 },
+  organizationDelete: { limit: 20, windowSeconds: 600 },
+  organizationInviteResend: { limit: 20, windowSeconds: 600 },
+  organizationInviteCancel: { limit: 20, windowSeconds: 600 },
+  transferOwnership: { limit: 10, windowSeconds: 600 },
 } as const satisfies Record<string, RateLimitConfig>;
 
 /** Pure boundary check, split out so the limit decision itself is unit-testable without a database. */

@@ -1,16 +1,23 @@
 import { NextResponse } from "next/server";
-import { guardApiRoute } from "@/lib/auth/apiGuard";
-import { createGmailOAuthClient, GMAIL_SEND_SCOPE } from "@/lib/email/gmailClient";
-import { GMAIL_OAUTH_STATE_COOKIE, GMAIL_OAUTH_COOKIE_PATH, GMAIL_OAUTH_STATE_MAX_AGE_SECONDS, generateOAuthState } from "@/lib/email/gmailOAuth";
+import { requireOrganizationOwner } from "@/lib/auth/organizationGuard";
+import { createGmailOAuthClient, GMAIL_SEND_SCOPE, GMAIL_IDENTITY_SCOPES } from "@/lib/email/gmailClient";
+import { createOAuthState } from "@/lib/email/gmailOAuth";
+import { RATE_LIMITS } from "@/lib/rateLimit";
 
 /**
- * Operator-only: starts the Gmail OAuth consent flow. Requests the minimum
- * sending scope (gmail.send) and offline access (so Google issues a refresh
- * token), and pins a CSRF state value in an HttpOnly cookie that
- * /api/email/gmail/callback must see echoed back unchanged.
+ * Workspace-owner-only: starts the Gmail OAuth consent flow for the
+ * caller's ACTIVE workspace. Requests the minimum sending scope
+ * (gmail.send) plus the minimum identity scopes needed to read back which
+ * Google account was actually authorized (openid + userinfo.email -- see
+ * lib/email/gmailClient.ts#getAuthorizedAccountEmail), and binds a
+ * short-lived, single-use, database-backed state token (see
+ * lib/email/gmailOAuth.ts) to this organization + this user, replacing the
+ * previous cookie-only CSRF token (architecture report, item 16). A plain
+ * member can use the workspace's already-connected sender to send
+ * certificates, but can never connect/reconnect/disconnect it themselves.
  */
 export async function GET() {
-  const guard = await guardApiRoute();
+  const guard = await requireOrganizationOwner({ rateLimit: { key: "gmail-connect", ...RATE_LIMITS.gmailConnect } });
   if ("response" in guard) return guard.response;
 
   let oauth2Client;
@@ -23,21 +30,14 @@ export async function GET() {
     );
   }
 
-  const state = generateOAuthState();
+  const state = await createOAuthState(guard.organizationId, guard.user.id);
+
   const authUrl = oauth2Client.generateAuthUrl({
     access_type: "offline",
-    scope: [GMAIL_SEND_SCOPE],
+    scope: [GMAIL_SEND_SCOPE, ...GMAIL_IDENTITY_SCOPES],
     prompt: "consent",
     state,
   });
 
-  const response = NextResponse.redirect(authUrl);
-  response.cookies.set(GMAIL_OAUTH_STATE_COOKIE, state, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: GMAIL_OAUTH_STATE_MAX_AGE_SECONDS,
-    path: GMAIL_OAUTH_COOKIE_PATH,
-  });
-  return response;
+  return NextResponse.redirect(authUrl);
 }

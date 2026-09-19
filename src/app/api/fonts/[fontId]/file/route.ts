@@ -1,20 +1,22 @@
 import { NextResponse } from "next/server";
-import { guardApiRoute } from "@/lib/auth/apiGuard";
-import { getCustomFont, downloadCustomFontFile } from "@/lib/fonts/customFonts";
+import { requireOrganizationContext } from "@/lib/auth/organizationGuard";
+import { getCustomFontForOrganization, downloadCustomFontFile } from "@/lib/fonts/customFonts";
 
 /**
  * Server-mediated font file download -- the only way the browser (via
  * FontFace, see lib/fonts/useLoadCustomFonts.ts) ever gets a custom font's
  * bytes. Never a direct/signed Storage URL: this route requires the same
- * authenticated session as every other operator-only route, and the
+ * authenticated session as every other workspace-scoped route, is scoped
+ * to the caller's active organization (a font id belonging to a different
+ * club's workspace 404s, exactly like it doesn't exist), and the
  * service-role key used to read private Storage never leaves the server.
  */
 export async function GET(_request: Request, { params }: RouteContext<"/api/fonts/[fontId]/file">) {
-  const guard = await guardApiRoute();
+  const guard = await requireOrganizationContext();
   if ("response" in guard) return guard.response;
 
   const { fontId } = await params;
-  const font = await getCustomFont(fontId);
+  const font = await getCustomFontForOrganization(fontId, guard.organizationId);
 
   if (!font) {
     return NextResponse.json({ error: "Font not found." }, { status: 404 });

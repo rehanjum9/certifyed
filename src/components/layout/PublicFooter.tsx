@@ -5,6 +5,7 @@ const NAV_LINKS = [
   { href: "/", label: "Home" },
   { href: "/about", label: "About" },
   { href: "/how-to-use", label: "How to use" },
+  { href: "/privacy", label: "Privacy" },
 ];
 
 interface PublicFooterProps {

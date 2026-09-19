@@ -10,7 +10,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "setup:storage": "node --env-file=.env.local scripts/setup-storage.mjs",
-    "create:operator": "node --env-file=.env.local scripts/create-operator.mjs"
+    "create:operator": "node --env-file=.env.local scripts/create-operator.mjs",
+    "bootstrap:platform-admin": "node --env-file=.env.local scripts/bootstrap-platform-admin.mjs",
+    "backfill:default-organization": "node --env-file=.env.local scripts/backfill-default-organization.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

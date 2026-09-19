@@ -234,13 +234,16 @@ export async function sendCertificateEmailsBatch(campaignId: string, requestedBa
       });
       const filename = buildCertificateFilename({ recipientName, serialNumber, rowId: row.id });
 
-      const result = await sendCertificateEmail({
-        to: row.recipient_email,
-        subject,
-        html,
-        text,
-        attachment: { filename, content: pdfBuffer },
-      });
+      const result = await sendCertificateEmail(
+        {
+          to: row.recipient_email,
+          subject,
+          html,
+          text,
+          attachment: { filename, content: pdfBuffer },
+        },
+        { organizationId: campaign.organization_id },
+      );
 
       await supabase
         .from("campaign_rows")
@@ -424,58 +427,3 @@ export async function processEmailJob(jobId: string, requestedBatchSize?: number
   }
 }
 
-// ---------------------------------------------------------------------------
-// Safe test send -- does NOT mutate the row's real status/email_message_id,
-// so it can be used repeatedly to verify sender/domain/attachment formatting
-// before a real bulk send.
-// ---------------------------------------------------------------------------
-
-export interface SendTestEmailInput {
-  campaignId: string;
-  /** Defaults to the first row in the campaign that already has a generated PDF. */
-  rowId?: string;
-  testEmail: string;
-}
-
-export async function sendTestCertificateEmail({ campaignId, rowId, testEmail }: SendTestEmailInput): Promise<{ messageId: string }> {
-  const supabase = createServiceRoleClient();
-  const campaign = await requireCampaign(campaignId);
-
-  const rowQuery = supabase.from("campaign_rows").select("*").eq("campaign_id", campaignId);
-  const { data: row, error } = rowId
-    ? await rowQuery.eq("id", rowId).maybeSingle()
-    : await rowQuery.not("pdf_path", "is", null).order("row_index", { ascending: true }).limit(1).maybeSingle();
-
-  if (error) throw new Error(`Failed to load row: ${error.message}`);
-  if (!row) throw new Error("No generated certificate is available to send as a test yet.");
-  if (!row.pdf_path) throw new Error("This row has not been generated yet -- generate its certificate first.");
-
-  const { data: pdfBlob, error: downloadError } = await supabase.storage
-    .from(STORAGE_BUCKETS.outputs)
-    .download(row.pdf_path);
-  if (downloadError || !pdfBlob) {
-    throw new Error(`Failed to load certificate PDF: ${downloadError?.message ?? "not found"}`);
-  }
-  const pdfBuffer = Buffer.from(await pdfBlob.arrayBuffer());
-
-  const rowData = (row.data ?? {}) as Record<string, string>;
-  const recipientName = rowData.name || null;
-  const serialNumber = rowData.serial_number || null;
-  const { subject, html, text } = renderCertificateEmail({ recipientName, campaignName: campaign.name, serialNumber });
-  const filename = buildCertificateFilename({ recipientName, serialNumber, rowId: row.id });
-
-  const result = await sendCertificateEmail({
-    to: testEmail,
-    // Reuses the same sanitized subject as a real send (renderCertificateEmail
-    // already strips header-injection characters from campaign.name) --
-    // never builds a second, unsanitized subject string from raw campaign data.
-    subject: `[TEST] ${subject}`,
-    html: `<p style="color:#b45309;font-weight:600;">This is a TEST email -- not sent to the real recipient.</p>${html}`,
-    text: `THIS IS A TEST EMAIL -- not sent to the real recipient.\n\n${text}`,
-    attachment: { filename, content: pdfBuffer },
-  });
-
-  // Deliberately does not touch row.status/email_message_id/emailed_at --
-  // a test send must never mark a real recipient row as sent.
-  return { messageId: result.messageId };
-}

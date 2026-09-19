@@ -19,8 +19,8 @@ export interface CampaignOverview extends CampaignListItem {
   emailProgressPercent: number;
 }
 
-export async function listCampaignsWithOverview(limit?: number): Promise<CampaignOverview[]> {
-  const campaigns = await listCampaigns();
+export async function listCampaignsWithOverview(organizationId: string, limit?: number): Promise<CampaignOverview[]> {
+  const campaigns = await listCampaigns(organizationId);
   const slice = typeof limit === "number" ? campaigns.slice(0, limit) : campaigns;
 
   return Promise.all(

@@ -14,7 +14,7 @@ export interface GuardOptions {
 
 export type GuardResult = { user: ApiUser } | { response: NextResponse };
 
-interface GuardDeps {
+export interface GuardDeps {
   getUser?: () => Promise<ApiUser | null>;
 }
 
@@ -35,12 +35,17 @@ async function defaultGetUser(): Promise<ApiUser | null> {
  * (optionally) enforces a per-operator rate limit for that specific
  * operation.
  *
- * Single-operator MVP model: there is no per-resource ownership check here
- * on purpose -- any authenticated session may access any existing
- * campaign/template/job. This is intentional and documented, not an
- * oversight. Before this app supports multiple independent accounts, a
- * real ownership/RLS layer (using auth.uid() against the existing nullable
- * created_by columns) must be added -- do not fake one here.
+ * Authentication only -- this function deliberately knows nothing about
+ * organizations/workspaces. Every route that touches a specific
+ * campaign/template/job/etc. layers organization-scoped authorization on
+ * top of this (see lib/auth/organizationGuard.ts's
+ * requireOrganizationContext/requireOrganizationMember/
+ * requireOrganizationOwner, which all call this first and then add the
+ * real per-workspace isolation check), or does its own explicit
+ * organization lookup the same way (e.g. the job-processing and Gmail
+ * OAuth callback routes). A route calling only guardApiRoute directly is
+ * one that genuinely has no organization-scoped resource to check (e.g.
+ * setting the active-workspace cookie, or accepting an invite).
  *
  * `deps.getUser` is injectable purely for unit testing without a real
  * cookie/session context.

@@ -17,17 +17,50 @@ function toCustomFontMeta(row: FontRow): CustomFontMeta {
   };
 }
 
-export async function listCustomFonts(): Promise<CustomFontMeta[]> {
+/**
+ * Custom fonts are workspace-specific (architecture report, item 25): Club
+ * A never sees Club B's uploaded fonts in its picker. The service-role
+ * client bypasses RLS, so this `.eq("organization_id", ...)` is the real
+ * isolation boundary here, not RLS.
+ */
+export async function listCustomFonts(organizationId: string): Promise<CustomFontMeta[]> {
   const supabase = createServiceRoleClient();
-  const { data, error } = await supabase.from("fonts").select("*").order("created_at", { ascending: false });
+  const { data, error } = await supabase
+    .from("fonts")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .order("created_at", { ascending: false });
 
   if (error) throw new Error(`Failed to load custom fonts: ${error.message}`);
   return (data ?? []).map(toCustomFontMeta);
 }
 
+/**
+ * Unscoped by organization -- internal use only (the PDF generation
+ * pipeline, see loadCustomFontsForFields below), where the font id being
+ * looked up already came from a template_fields row belonging to a
+ * template whose organization was verified earlier in the same request,
+ * never from unverified client input. Any route that resolves a font id
+ * supplied directly by a request (the file-download route, delete) MUST
+ * use getCustomFontForOrganization instead.
+ */
 export async function getCustomFont(fontId: string): Promise<FontRow | null> {
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase.from("fonts").select("*").eq("id", fontId).maybeSingle();
+
+  if (error) throw new Error(`Failed to load font: ${error.message}`);
+  return data;
+}
+
+/** Org-scoped lookup for any route resolving a font id supplied by the caller (file download, delete). Returns null -- identical to "doesn't exist" -- for a font that exists but belongs to a different organization. */
+export async function getCustomFontForOrganization(fontId: string, organizationId: string): Promise<FontRow | null> {
+  const supabase = createServiceRoleClient();
+  const { data, error } = await supabase
+    .from("fonts")
+    .select("*")
+    .eq("id", fontId)
+    .eq("organization_id", organizationId)
+    .maybeSingle();
 
   if (error) throw new Error(`Failed to load font: ${error.message}`);
   return data;
@@ -61,7 +94,10 @@ export interface LoadedCustomFont {
  * exists, or whose file fails to download, is silently skipped: the
  * renderer falls back to the default built-in font and reports a warning
  * for that overlay rather than failing the whole generation batch over one
- * broken font reference.
+ * broken font reference. Callers pass font ids sourced from an
+ * already-organization-verified template's fields (see
+ * lib/campaigns/generation.ts) -- not scoped by organization again here,
+ * see getCustomFont's doc comment.
  */
 export async function loadCustomFontsForFields(fontIds: string[]): Promise<LoadedCustomFont[]> {
   const uniqueIds = Array.from(new Set(fontIds));
@@ -83,6 +119,7 @@ export async function loadCustomFontsForFields(fontIds: string[]): Promise<Loade
 }
 
 export interface CreateCustomFontInput {
+  organizationId: string;
   displayName: string;
   originalFilename: string;
   storagePath: string;
@@ -97,6 +134,7 @@ export async function createCustomFont(input: CreateCustomFontInput): Promise<Cu
   const { data, error } = await supabase
     .from("fonts")
     .insert({
+      organization_id: input.organizationId,
       display_name: input.displayName,
       original_filename: input.originalFilename,
       storage_path: input.storagePath,
@@ -123,8 +161,14 @@ export interface FontInUseTemplate {
  * shared with built-ins, see 0006_custom_fonts.sql), so this is a plain
  * lookup rather than a join. Used to block deletion (item 9) with a useful,
  * specific message instead of silently breaking those templates.
+ *
+ * Scoped to `organizationId`'s own templates (item 25: "in use" detection
+ * must only consider the correct organization) -- a font can only ever be
+ * selected by a template in its own organization via this app's UI/API, so
+ * this is defense in depth against ever reporting (or being blocked by) a
+ * different organization's template.
  */
-export async function listTemplatesUsingFont(fontId: string): Promise<FontInUseTemplate[]> {
+export async function listTemplatesUsingFont(fontId: string, organizationId: string): Promise<FontInUseTemplate[]> {
   const supabase = createServiceRoleClient();
 
   const { data: fieldRows, error: fieldsError } = await supabase
@@ -140,6 +184,7 @@ export async function listTemplatesUsingFont(fontId: string): Promise<FontInUseT
   const { data: templateRows, error: templatesError } = await supabase
     .from("templates")
     .select("id, name")
+    .eq("organization_id", organizationId)
     .in("id", templateIds);
 
   if (templatesError) throw new Error(`Failed to check font usage: ${templatesError.message}`);
@@ -152,16 +197,16 @@ export type DeleteCustomFontResult =
   | { ok: false; reason: "in_use"; templates: FontInUseTemplate[] };
 
 /**
- * Deletes a custom font only if no template field currently references it
- * (item 9: never silently break an existing template). Storage removal
- * happens after the DB row is gone, matching the rest of this app's
- * delete-then-clean-up-storage ordering.
+ * Deletes a custom font only if it belongs to `organizationId` and no
+ * template field currently references it (item 9: never silently break an
+ * existing template). Storage removal happens after the DB row is gone,
+ * matching the rest of this app's delete-then-clean-up-storage ordering.
  */
-export async function deleteCustomFont(fontId: string): Promise<DeleteCustomFontResult> {
-  const font = await getCustomFont(fontId);
+export async function deleteCustomFont(fontId: string, organizationId: string): Promise<DeleteCustomFontResult> {
+  const font = await getCustomFontForOrganization(fontId, organizationId);
   if (!font) return { ok: false, reason: "not_found" };
 
-  const templatesInUse = await listTemplatesUsingFont(fontId);
+  const templatesInUse = await listTemplatesUsingFont(fontId, organizationId);
   if (templatesInUse.length > 0) {
     return { ok: false, reason: "in_use", templates: templatesInUse };
   }

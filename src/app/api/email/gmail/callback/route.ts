@@ -1,7 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { guardApiRoute } from "@/lib/auth/apiGuard";
-import { createGmailOAuthClient } from "@/lib/email/gmailClient";
-import { GMAIL_OAUTH_STATE_COOKIE, GMAIL_OAUTH_COOKIE_PATH } from "@/lib/email/gmailOAuth";
+import { getMembership } from "@/lib/organizations/organizations";
+import { createGmailOAuthClient, getAuthorizedAccountEmail } from "@/lib/email/gmailClient";
+import { consumeOAuthState } from "@/lib/email/gmailOAuth";
+import { saveEmailConnection } from "@/lib/email/connections";
 
 function htmlPage(title: string, bodyHtml: string, status: number): NextResponse {
   const html = `<!doctype html>
@@ -15,28 +17,38 @@ function htmlPage(title: string, bodyHtml: string, status: number): NextResponse
   return new NextResponse(html, { status, headers: { "Content-Type": "text/html; charset=utf-8" } });
 }
 
-function clearStateCookie(response: NextResponse): void {
-  response.cookies.set(GMAIL_OAUTH_STATE_COOKIE, "", { maxAge: 0, path: GMAIL_OAUTH_COOKIE_PATH });
-}
-
 function errorPage(message: string): NextResponse {
-  const response = htmlPage(
+  return htmlPage(
     "Gmail connection failed",
-    `<h1>Gmail connection failed</h1><p>${message}</p><p>Retry from <code>GET /api/email/gmail/connect</code>.</p>`,
+    `<h1>Gmail connection failed</h1><p>${message}</p><p>Return to <a href="/settings">Settings</a> to try again.</p>`,
     400,
   );
-  clearStateCookie(response);
-  return response;
 }
 
 /**
- * Operator-only OAuth callback. Validates the CSRF state cookie set by
- * /connect, exchanges the authorization code for tokens, and -- since this
- * single-operator MVP has nowhere else to durably store one -- prints the
- * refresh token to the server terminal exactly once so the operator can
- * copy it into GMAIL_REFRESH_TOKEN. The token is never rendered in this
- * response, never stored in a cookie/localStorage, and never routed through
- * any app logging path.
+ * Workspace-scoped OAuth callback (architecture report, items 15-18).
+ *
+ * - Requires the same authenticated session as every other route
+ *   (guardApiRoute) -- an unauthenticated request never reaches the state
+ *   check at all.
+ * - The `state` param is validated against a short-lived, single-use,
+ *   database-backed record (consumeOAuthState): it must exist, not be
+ *   expired, not already be consumed, AND belong to the currently
+ *   authenticated user -- `?organizationId=...` or any other
+ *   client-supplied value is never trusted; the organization this
+ *   connects to comes ONLY from that state record.
+ * - The caller's owner role in that organization is re-checked here (not
+ *   just at /connect time) in case it changed in between -- Gmail
+ *   connection management is owner-only (see requireOrganizationOwner).
+ * - The connected account's email is read from Google's own signed ID
+ *   token (getAuthorizedAccountEmail), never typed by the user -- no
+ *   From-address spoofing.
+ * - The refresh token is encrypted (lib/crypto/secretBox.ts) before it
+ *   ever reaches the database, and is NEVER printed, logged, or included
+ *   in this response -- unlike the previous single-operator version of
+ *   this route, which printed it to the server terminal for manual setup.
+ *   That one-time-setup mechanism is fully removed; every workspace now
+ *   connects its own account through this same self-service flow.
  */
 export async function GET(request: NextRequest) {
   const guard = await guardApiRoute();
@@ -44,11 +56,24 @@ export async function GET(request: NextRequest) {
 
   const code = request.nextUrl.searchParams.get("code");
   const state = request.nextUrl.searchParams.get("state");
-  const cookieState = request.cookies.get(GMAIL_OAUTH_STATE_COOKIE)?.value;
 
   if (!code) return errorPage("Google did not return an authorization code.");
-  if (!state || !cookieState || state !== cookieState) {
-    return errorPage("Missing or mismatched OAuth state. This can happen if the link was opened twice or took too long.");
+  if (!state) return errorPage("Missing OAuth state. Start the connection again from Settings.");
+
+  const stateResult = await consumeOAuthState(state, guard.user.id);
+  if (!stateResult.ok) {
+    const reasonMessage: Record<typeof stateResult.reason, string> = {
+      not_found: "This connection request wasn't recognized.",
+      expired: "This connection request has expired.",
+      already_consumed: "This connection request was already used.",
+      wrong_user: "This connection request belongs to a different signed-in session.",
+    };
+    return errorPage(`${reasonMessage[stateResult.reason]} Start the connection again from Settings.`);
+  }
+
+  const membership = await getMembership(stateResult.organizationId, guard.user.id);
+  if (!membership || membership.role !== "owner") {
+    return errorPage("You no longer have permission to manage this workspace's email connection.");
   }
 
   let oauth2Client;
@@ -68,31 +93,35 @@ export async function GET(request: NextRequest) {
           "Remove CERTIFYED_'s access at https://myaccount.google.com/permissions, then retry the connection so Google issues a new one.",
       );
     }
+    if (!tokens.id_token) {
+      return errorPage("Google did not confirm the connected account's identity. Please retry the connection.");
+    }
 
-    // One-time, local-terminal-only handoff -- intentionally not the app's
-    // logger (this app has none, and never should route secrets through
-    // one). Only the operator watching `next dev`'s terminal ever sees this.
-    console.log("");
-    console.log("===== Gmail connected -- copy this into .env.local, then restart `npm run dev` =====");
-    console.log(`GMAIL_REFRESH_TOKEN=${refreshToken}`);
-    console.log("=======================================================================================");
-    console.log("");
+    const accountEmail = await getAuthorizedAccountEmail(oauth2Client, tokens.id_token);
 
-    const response = htmlPage(
+    const connection = await saveEmailConnection({
+      organizationId: stateResult.organizationId,
+      senderEmail: accountEmail,
+      refreshToken,
+      connectedBy: guard.user.id,
+    });
+
+    return htmlPage(
       "Gmail connected",
-      `<h1>Gmail connected</h1><p>Check the terminal running <code>npm run dev</code> for a one-time
-       <code>GMAIL_REFRESH_TOKEN</code> value. Copy it into <code>.env.local</code>, then restart the dev server
-       to finish enabling Gmail sending.</p>`,
+      `<h1>Gmail connected</h1><p><strong>${connection.senderEmail}</strong> is now sending certificate emails for this workspace.</p><p><a href="/settings">Return to Settings</a></p>`,
       200,
     );
-    clearStateCookie(response);
-    return response;
-  } catch {
-    // Never echo the raw exception here -- it comes from Google's OAuth
+  } catch (error) {
+    // Never echo the raw exception here -- it may come from Google's OAuth
     // token endpoint (via google-auth-library) and can carry provider
     // implementation detail that has no business in an HTTP response body.
+    // Also never logged: this whole block is only ever reached with real
+    // OAuth material in scope, and nothing in this route writes to the
+    // server console.
     return errorPage(
-      "Failed to complete the Gmail connection. The authorization code may have expired or already been used -- retry the connection.",
+      error instanceof Error && error.message.includes("did not confirm a verified email")
+        ? error.message
+        : "Failed to complete the Gmail connection. The authorization code may have expired or already been used -- retry the connection.",
     );
   }
 }

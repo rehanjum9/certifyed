@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/Button";
+import { Button, LinkButton } from "@/components/ui/Button";
 import { Spinner } from "@/components/ui/Spinner";
 import { Alert, type AlertVariant } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
@@ -29,8 +29,15 @@ interface EmailDeliveryPanelProps {
   campaignId: string;
   initialJob: EmailJobInfo | null;
   initialProgress: EmailProgressInfo;
-  /** Masked (e.g. "de***@example.com") -- never the full address. Null when RESEND_TEST_EMAIL isn't configured. */
-  maskedTestEmail: string | null;
+  /**
+   * Why this workspace can't send right now, or null if it can -- from
+   * getOrganizationEmailSendError (lib/email/provider.ts), computed
+   * server-side from this workspace's OWN Gmail connection (or the
+   * platform's Resend config). Never a hint that some other/global sender
+   * could be used instead -- when this is set, the real "Send
+   * Certificates" controls are replaced with this message, full stop.
+   */
+  emailSendBlockedReason: string | null;
 }
 
 interface ProcessResponse {
@@ -50,14 +57,9 @@ interface RetryResponse {
   error?: string;
 }
 
-interface TestEmailResponse {
-  messageId?: string;
-  error?: string;
-}
-
 const POLL_DELAY_MS = 500;
 
-export function EmailDeliveryPanel({ campaignId, initialJob, initialProgress, maskedTestEmail }: EmailDeliveryPanelProps) {
+export function EmailDeliveryPanel({ campaignId, initialJob, initialProgress, emailSendBlockedReason }: EmailDeliveryPanelProps) {
   const router = useRouter();
   const [job, setJob] = useState<EmailJobInfo | null>(initialJob);
   const [progress, setProgress] = useState<EmailProgressInfo>(initialProgress);
@@ -65,9 +67,6 @@ export function EmailDeliveryPanel({ campaignId, initialJob, initialProgress, ma
   const [retrying, setRetrying] = useState(false);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [testSending, setTestSending] = useState(false);
-  const [testResult, setTestResult] = useState<string | null>(null);
-  const [testError, setTestError] = useState<string | null>(null);
   const stopRef = useRef(false);
 
   const loop = useCallback(
@@ -174,25 +173,6 @@ export function EmailDeliveryPanel({ campaignId, initialJob, initialProgress, ma
     router.refresh();
   }
 
-  async function handleSendTest() {
-    setTestSending(true);
-    setTestError(null);
-    setTestResult(null);
-    try {
-      const response = await fetch(`/api/campaigns/${campaignId}/test-email`, { method: "POST" });
-      const body = (await response.json()) as TestEmailResponse;
-      if (!response.ok || !body.messageId) {
-        setTestError(body.error ?? "Failed to send test email.");
-        return;
-      }
-      setTestResult("Test email sent. This did not mark any recipient as sent.");
-    } catch {
-      setTestError("Failed to send test email. Check your connection.");
-    } finally {
-      setTestSending(false);
-    }
-  }
-
   const isActive = job?.status === "pending" || job?.status === "running";
   const hasEmailWork = progress.pending > 0 || progress.emailing > 0;
   // Reached only when a batch already ran to the end (no row left pending
@@ -203,10 +183,26 @@ export function EmailDeliveryPanel({ campaignId, initialJob, initialProgress, ma
   const completionAlertVariant: AlertVariant =
     completion?.tone === "success" ? "success" : completion?.tone === "warning" ? "warning" : "info";
 
+  // Nothing generated yet takes priority over the Gmail-connection check --
+  // there's nothing to send either way, so "connect Gmail" would be a
+  // confusing thing to lead with.
+  const nothingReadyYet = progress.eligibleTotal === 0 && !isActive;
+  // Blocks only the "start a NEW send" entry points -- an already-active or
+  // already-completed job's own status/history is still shown regardless
+  // (e.g. Gmail was connected when a send started, then disconnected).
+  const sendBlocked = !nothingReadyYet && !isActive && !job && !!emailSendBlockedReason;
+
   return (
     <div className="flex flex-col gap-4">
-      {progress.eligibleTotal === 0 && !isActive ? (
+      {nothingReadyYet ? (
         <p className="text-sm text-slate-500">Generate certificates first — nothing is ready to email yet.</p>
+      ) : sendBlocked ? (
+        <Alert variant="warning">
+          <p>{emailSendBlockedReason}</p>
+          <LinkButton href="/settings" variant="secondary" size="sm" className="mt-2">
+            Open Settings
+          </LinkButton>
+        </Alert>
       ) : completion ? (
         <Alert variant={completionAlertVariant}>
           {completion.lines.map((line, index) => (
@@ -244,7 +240,7 @@ export function EmailDeliveryPanel({ campaignId, initialJob, initialProgress, ma
         </div>
       )}
 
-      {!isActive && hasEmailWork && job && (
+      {!isActive && hasEmailWork && job && !emailSendBlockedReason && (
         <Button onClick={handleStart} disabled={starting}>
           {starting && <Spinner className="h-4 w-4" />}
           Send Certificates
@@ -265,29 +261,6 @@ export function EmailDeliveryPanel({ campaignId, initialJob, initialProgress, ma
 
       {job?.lastError && !isActive && <Alert variant="error">Last error: {job.lastError}</Alert>}
       {error && <Alert variant="error">{error}</Alert>}
-
-      <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-medium text-slate-700">Test delivery</p>
-            {maskedTestEmail ? (
-              <p className="mt-0.5 text-xs text-slate-500">
-                Sends one sample certificate to <span className="font-mono text-slate-700">{maskedTestEmail}</span>.
-              </p>
-            ) : (
-              <p className="mt-0.5 text-xs text-slate-500">Test sending isn&apos;t configured yet.</p>
-            )}
-          </div>
-          {maskedTestEmail && (
-            <Button variant="secondary" size="sm" onClick={handleSendTest} disabled={testSending}>
-              {testSending && <Spinner className="h-4 w-4" />}
-              Send test email
-            </Button>
-          )}
-        </div>
-        {testResult && <p className="mt-2 text-xs text-emerald-700">{testResult}</p>}
-        {testError && <p className="mt-2 text-xs text-red-700">{testError}</p>}
-      </div>
     </div>
   );
 }

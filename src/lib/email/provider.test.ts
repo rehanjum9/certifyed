@@ -2,10 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./resend", () => ({ sendCertificateEmail: vi.fn() }));
 vi.mock("./gmail", () => ({ sendCertificateEmail: vi.fn() }));
+vi.mock("./connections", () => ({ getEmailConnectionForOrganization: vi.fn() }));
 
 import { sendCertificateEmail as sendViaResend } from "./resend";
 import { sendCertificateEmail as sendViaGmail } from "./gmail";
-import { resolveEmailProvider, getEmailProviderConfigError, sendCertificateEmail } from "./provider";
+import { getEmailConnectionForOrganization } from "./connections";
+import { resolveEmailProvider, getEmailProviderConfigError, getOrganizationEmailSendError, sendCertificateEmail } from "./provider";
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -48,24 +50,26 @@ describe("resolveEmailProvider", () => {
 });
 
 describe("sendCertificateEmail dispatch", () => {
+  const context = { organizationId: "org-a" };
+
   it("dispatches to Resend when EMAIL_PROVIDER is resend (or unset)", async () => {
     delete process.env.EMAIL_PROVIDER;
     vi.mocked(sendViaResend).mockResolvedValue({ messageId: "resend_1" });
 
-    const result = await sendCertificateEmail(baseInput);
+    const result = await sendCertificateEmail(baseInput, context);
 
     expect(sendViaResend).toHaveBeenCalledWith(baseInput);
     expect(sendViaGmail).not.toHaveBeenCalled();
     expect(result.messageId).toBe("resend_1");
   });
 
-  it("dispatches to Gmail when EMAIL_PROVIDER=gmail", async () => {
+  it("dispatches to Gmail when EMAIL_PROVIDER=gmail, passing the campaign's organization context through", async () => {
     process.env.EMAIL_PROVIDER = "gmail";
     vi.mocked(sendViaGmail).mockResolvedValue({ messageId: "gmail_1" });
 
-    const result = await sendCertificateEmail(baseInput);
+    const result = await sendCertificateEmail(baseInput, context);
 
-    expect(sendViaGmail).toHaveBeenCalledWith(baseInput);
+    expect(sendViaGmail).toHaveBeenCalledWith(baseInput, context);
     expect(sendViaResend).not.toHaveBeenCalled();
     expect(result.messageId).toBe("gmail_1");
   });
@@ -73,13 +77,13 @@ describe("sendCertificateEmail dispatch", () => {
   it("throws without calling either provider when EMAIL_PROVIDER is invalid", async () => {
     process.env.EMAIL_PROVIDER = "mailgun";
 
-    await expect(sendCertificateEmail(baseInput)).rejects.toThrow(/Invalid EMAIL_PROVIDER/);
+    await expect(sendCertificateEmail(baseInput, context)).rejects.toThrow(/Invalid EMAIL_PROVIDER/);
     expect(sendViaResend).not.toHaveBeenCalled();
     expect(sendViaGmail).not.toHaveBeenCalled();
   });
 });
 
-describe("getEmailProviderConfigError", () => {
+describe("getEmailProviderConfigError (platform-level only)", () => {
   it("returns the invalid-provider message when EMAIL_PROVIDER is invalid", () => {
     process.env.EMAIL_PROVIDER = "mailgun";
     expect(getEmailProviderConfigError()).toMatch(/Invalid EMAIL_PROVIDER/);
@@ -99,31 +103,74 @@ describe("getEmailProviderConfigError", () => {
     expect(getEmailProviderConfigError()).toMatch(/RESEND_API_KEY/);
   });
 
-  it("flags missing Gmail OAuth client config before checking the refresh token", () => {
+  it("flags missing Gmail OAuth client config", () => {
     process.env.EMAIL_PROVIDER = "gmail";
     delete process.env.GMAIL_CLIENT_ID;
     delete process.env.GMAIL_CLIENT_SECRET;
     delete process.env.GMAIL_REDIRECT_URI;
-    delete process.env.GMAIL_REFRESH_TOKEN;
     expect(getEmailProviderConfigError()).toMatch(/GMAIL_CLIENT_ID/);
   });
 
-  it("flags a missing refresh token once OAuth client config is present", () => {
+  it("returns null for Gmail once the shared OAuth app is configured -- regardless of any organization's connection state", () => {
     process.env.EMAIL_PROVIDER = "gmail";
     process.env.GMAIL_CLIENT_ID = "id";
     process.env.GMAIL_CLIENT_SECRET = "secret";
     process.env.GMAIL_REDIRECT_URI = "http://localhost:3000/api/email/gmail/callback";
-    delete process.env.GMAIL_REFRESH_TOKEN;
-    expect(getEmailProviderConfigError()).toMatch(/not connected yet/);
+    expect(getEmailProviderConfigError()).toBeNull();
+  });
+});
+
+describe("getOrganizationEmailSendError", () => {
+  it("returns the platform config error before ever checking the organization's connection", async () => {
+    process.env.EMAIL_PROVIDER = "gmail";
+    delete process.env.GMAIL_CLIENT_ID;
+
+    const result = await getOrganizationEmailSendError("org-a");
+    expect(result).toMatch(/GMAIL_CLIENT_ID/);
+    expect(getEmailConnectionForOrganization).not.toHaveBeenCalled();
   });
 
-  it("returns null for Gmail once fully configured", () => {
+  it("returns null for the resend provider without checking any Gmail connection", async () => {
+    delete process.env.EMAIL_PROVIDER;
+    process.env.RESEND_API_KEY = "key";
+    process.env.RESEND_FROM_EMAIL = "certs@example.com";
+
+    expect(await getOrganizationEmailSendError("org-a")).toBeNull();
+    expect(getEmailConnectionForOrganization).not.toHaveBeenCalled();
+  });
+
+  it("reports 'connect a Gmail account' for an organization with no connection", async () => {
     process.env.EMAIL_PROVIDER = "gmail";
     process.env.GMAIL_CLIENT_ID = "id";
     process.env.GMAIL_CLIENT_SECRET = "secret";
     process.env.GMAIL_REDIRECT_URI = "http://localhost:3000/api/email/gmail/callback";
-    process.env.GMAIL_REFRESH_TOKEN = "refresh-token";
-    process.env.GMAIL_FROM_EMAIL = "operator@gmail.com";
-    expect(getEmailProviderConfigError()).toBeNull();
+    vi.mocked(getEmailConnectionForOrganization).mockResolvedValue(null);
+
+    const result = await getOrganizationEmailSendError("org-with-no-connection");
+    expect(result).toMatch(/Connect a Gmail account/);
+    expect(getEmailConnectionForOrganization).toHaveBeenCalledWith("org-with-no-connection");
+  });
+
+  it("returns null once that organization has a Gmail connection", async () => {
+    process.env.EMAIL_PROVIDER = "gmail";
+    process.env.GMAIL_CLIENT_ID = "id";
+    process.env.GMAIL_CLIENT_SECRET = "secret";
+    process.env.GMAIL_REDIRECT_URI = "http://localhost:3000/api/email/gmail/callback";
+    vi.mocked(getEmailConnectionForOrganization).mockResolvedValue({ senderEmail: "club@gmail.com", refreshToken: "rt" });
+
+    expect(await getOrganizationEmailSendError("org-a")).toBeNull();
+  });
+
+  it("never lets one organization's connected state satisfy another organization's check", async () => {
+    process.env.EMAIL_PROVIDER = "gmail";
+    process.env.GMAIL_CLIENT_ID = "id";
+    process.env.GMAIL_CLIENT_SECRET = "secret";
+    process.env.GMAIL_REDIRECT_URI = "http://localhost:3000/api/email/gmail/callback";
+    vi.mocked(getEmailConnectionForOrganization).mockImplementation(async (organizationId: string) =>
+      organizationId === "org-a" ? { senderEmail: "club-a@gmail.com", refreshToken: "rt" } : null,
+    );
+
+    expect(await getOrganizationEmailSendError("org-a")).toBeNull();
+    expect(await getOrganizationEmailSendError("org-b")).toMatch(/Connect a Gmail account/);
   });
 });

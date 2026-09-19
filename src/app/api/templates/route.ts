@@ -3,15 +3,16 @@ import { processUploadedSvg } from "@/lib/svg/process";
 import { MAX_SVG_UPLOAD_BYTES } from "@/lib/svg/constants";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { STORAGE_BUCKETS } from "@/lib/supabase/storage";
-import { guardApiRoute } from "@/lib/auth/apiGuard";
+import { requireOrganizationContext } from "@/lib/auth/organizationGuard";
 import { RATE_LIMITS } from "@/lib/rateLimit";
 import { exceedsDeclaredContentLength } from "@/lib/upload/contentLength";
 
 const MAX_NAME_LENGTH = 200;
 
 export async function POST(request: Request) {
-  const guard = await guardApiRoute({ rateLimit: { key: "template-create", ...RATE_LIMITS.templateCreate } });
+  const guard = await requireOrganizationContext({ rateLimit: { key: "template-create", ...RATE_LIMITS.templateCreate } });
   if ("response" in guard) return guard.response;
+  const { organizationId } = guard;
 
   // Defense-in-depth: reject an obviously oversized request before
   // buffering/parsing the whole multipart body. Not authoritative -- the
@@ -68,7 +69,7 @@ export async function POST(request: Request) {
 
   const { sanitizedSvg, width, height } = outcome.result;
   const templateId = crypto.randomUUID();
-  const storagePath = `${templateId}/source.svg`;
+  const storagePath = `${organizationId}/${templateId}/source.svg`;
 
   const supabase = createServiceRoleClient();
   const { error: uploadError } = await supabase.storage
@@ -86,6 +87,7 @@ export async function POST(request: Request) {
     .from("templates")
     .insert({
       id: templateId,
+      organization_id: organizationId,
       name: name.trim(),
       svg_path: storagePath,
       svg_width: width,

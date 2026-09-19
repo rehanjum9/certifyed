@@ -5,10 +5,19 @@ vi.mock("@/lib/supabase/server", () => ({ createServiceRoleClient: vi.fn() }));
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { deleteCustomFont, listTemplatesUsingFont } from "./customFonts";
 
+const ORG_ID = "org-1";
+
 interface MockConfig {
-  fontRow: { id: string; storage_path: string } | null;
+  fontRow: { id: string; storage_path: string; organization_id?: string } | null;
   fieldRows: { template_id: string }[];
   templateRows: { id: string; name: string }[];
+}
+
+/** Chainable stub: every `.eq()` call just returns itself, so any number of `.eq(...)` filters before the terminal method (`.maybeSingle()`/`.in()`) work regardless of call order. */
+function chainable(terminal: Record<string, () => unknown>) {
+  const node: Record<string, unknown> = { ...terminal };
+  node.eq = () => node;
+  return node;
 }
 
 function buildMockClient(config: MockConfig) {
@@ -20,11 +29,7 @@ function buildMockClient(config: MockConfig) {
   const from = vi.fn((table: string) => {
     if (table === "fonts") {
       return {
-        select: () => ({
-          eq: () => ({
-            maybeSingle: async () => ({ data: config.fontRow, error: null }),
-          }),
-        }),
+        select: () => chainable({ maybeSingle: async () => ({ data: config.fontRow, error: null }) }),
         delete: deleteFontMock,
       };
     }
@@ -37,9 +42,7 @@ function buildMockClient(config: MockConfig) {
     }
     if (table === "templates") {
       return {
-        select: () => ({
-          in: async () => ({ data: config.templateRows, error: null }),
-        }),
+        select: () => chainable({ in: async () => ({ data: config.templateRows, error: null }) }),
       };
     }
     throw new Error(`unexpected table: ${table}`);
@@ -59,10 +62,10 @@ describe("listTemplatesUsingFont", () => {
     const client = buildMockClient({ fontRow: null, fieldRows: [], templateRows: [] });
     vi.mocked(createServiceRoleClient).mockReturnValue(client as unknown as ReturnType<typeof createServiceRoleClient>);
 
-    expect(await listTemplatesUsingFont("font-1")).toEqual([]);
+    expect(await listTemplatesUsingFont("font-1", ORG_ID)).toEqual([]);
   });
 
-  it("returns the distinct templates referencing the font", async () => {
+  it("returns the distinct templates referencing the font, scoped to the given organization", async () => {
     const client = buildMockClient({
       fontRow: null,
       fieldRows: [{ template_id: "t1" }, { template_id: "t1" }, { template_id: "t2" }],
@@ -73,7 +76,7 @@ describe("listTemplatesUsingFont", () => {
     });
     vi.mocked(createServiceRoleClient).mockReturnValue(client as unknown as ReturnType<typeof createServiceRoleClient>);
 
-    const result = await listTemplatesUsingFont("font-1");
+    const result = await listTemplatesUsingFont("font-1", ORG_ID);
     expect(result).toEqual([
       { id: "t1", name: "Graduation" },
       { id: "t2", name: "Workshop" },
@@ -82,11 +85,11 @@ describe("listTemplatesUsingFont", () => {
 });
 
 describe("deleteCustomFont", () => {
-  it("returns not_found when the font doesn't exist, without touching template_fields or storage", async () => {
+  it("returns not_found when the font doesn't exist in this organization, without touching template_fields or storage", async () => {
     const client = buildMockClient({ fontRow: null, fieldRows: [], templateRows: [] });
     vi.mocked(createServiceRoleClient).mockReturnValue(client as unknown as ReturnType<typeof createServiceRoleClient>);
 
-    const result = await deleteCustomFont("missing-font");
+    const result = await deleteCustomFont("missing-font", ORG_ID);
 
     expect(result).toEqual({ ok: false, reason: "not_found" });
     expect(client.deleteFontMock).not.toHaveBeenCalled();
@@ -101,7 +104,7 @@ describe("deleteCustomFont", () => {
     });
     vi.mocked(createServiceRoleClient).mockReturnValue(client as unknown as ReturnType<typeof createServiceRoleClient>);
 
-    const result = await deleteCustomFont("font-1");
+    const result = await deleteCustomFont("font-1", ORG_ID);
 
     expect(result).toEqual({
       ok: false,
@@ -120,7 +123,7 @@ describe("deleteCustomFont", () => {
     });
     vi.mocked(createServiceRoleClient).mockReturnValue(client as unknown as ReturnType<typeof createServiceRoleClient>);
 
-    const result = await deleteCustomFont("font-1");
+    const result = await deleteCustomFont("font-1", ORG_ID);
 
     expect(result).toEqual({ ok: true });
     expect(client.deleteFontMock).toHaveBeenCalledTimes(1);

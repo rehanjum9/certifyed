@@ -238,6 +238,24 @@ export function IconFileText({ className }: IconProps) {
   );
 }
 
+export function IconShield({ className }: IconProps) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z" />
+      <path d="M9 12l2 2 4-4" />
+    </svg>
+  );
+}
+
 export function IconLogOut({ className }: IconProps) {
   return (
     <svg
@@ -253,6 +271,16 @@ export function IconLogOut({ className }: IconProps) {
       <path d="M9 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h4" />
       <path d="M14 8l4 4-4 4" />
       <path d="M18 12H9" />
+    </svg>
+  );
+}
+
+export function IconDotsVertical({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden="true">
+      <circle cx="12" cy="5" r="1.8" />
+      <circle cx="12" cy="12" r="1.8" />
+      <circle cx="12" cy="19" r="1.8" />
     </svg>
   );
 }

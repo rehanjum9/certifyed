@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
-import { IconDashboard, IconTemplates, IconCampaigns, IconSettings } from "@/components/ui/icons";
+import { IconDashboard, IconTemplates, IconCampaigns, IconSettings, IconShield } from "@/components/ui/icons";
+import { WorkspaceSwitcher } from "@/components/organizations/WorkspaceSwitcher";
+import type { LayoutWorkspaceInfo } from "@/lib/organizations/pageContext";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: IconDashboard, exact: true },
@@ -12,13 +14,17 @@ const NAV_ITEMS = [
   { href: "/settings", label: "Settings", icon: IconSettings, exact: false },
 ];
 
+const ADMIN_NAV_ITEM = { href: "/admin/organizations", label: "Admin", icon: IconShield, exact: false };
+
 interface SidebarProps {
   mobileOpen: boolean;
   onClose: () => void;
+  workspace: LayoutWorkspaceInfo;
 }
 
-export function Sidebar({ mobileOpen, onClose }: SidebarProps) {
+export function Sidebar({ mobileOpen, onClose, workspace }: SidebarProps) {
   const pathname = usePathname();
+  const navItems = workspace.isPlatformAdmin ? [...NAV_ITEMS, ADMIN_NAV_ITEM] : NAV_ITEMS;
 
   return (
     <>
@@ -49,8 +55,18 @@ export function Sidebar({ mobileOpen, onClose }: SidebarProps) {
           </span>
         </Link>
 
+        {workspace.activeOrganizationId && workspace.activeOrganizationName && (
+          <div className="border-b border-white/10 py-2">
+            <WorkspaceSwitcher
+              activeOrganizationId={workspace.activeOrganizationId}
+              activeOrganizationName={workspace.activeOrganizationName}
+              memberships={workspace.memberships}
+            />
+          </div>
+        )}
+
         <nav className="flex flex-1 flex-col gap-1 p-3">
-          {NAV_ITEMS.map((item) => {
+          {navItems.map((item) => {
             const isActive = item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(`${item.href}/`);
             const Icon = item.icon;
 

@@ -4,8 +4,11 @@ import { cookies } from "next/headers";
 import type { Database } from "@/types/database";
 
 /**
- * Session-aware server client. Unused until Supabase Auth is added, but
- * wired now so that future auth work is additive, not a rewrite.
+ * Session-aware server client: reads/refreshes the caller's own Supabase
+ * Auth session from cookies. This is what guardApiRoute's defaultGetUser,
+ * lib/organizations/pageContext.ts, and every server component/route that
+ * needs to know WHO is calling use -- it is subject to RLS as that user,
+ * never a privileged client (see createServiceRoleClient below for that).
  */
 export async function createServerSupabaseClient() {
   const cookieStore = await cookies();
@@ -61,9 +64,16 @@ function requireServiceRoleEnv(): { url: string; secretKey: string } {
 }
 
 /**
- * Privileged client that bypasses Row Level Security. This is what all
- * current server code (route handlers, the job worker) uses, since there is
- * no per-user auth yet. Never import this from a Client Component.
+ * Privileged client that bypasses Row Level Security entirely. Real
+ * per-user auth exists (Supabase Auth, see createServerSupabaseClient
+ * above) -- this client is used anyway for every actual read/write because
+ * organization-level isolation in this app is enforced primarily at the
+ * APPLICATION layer (every query explicitly filtered by organization_id --
+ * see lib/organizations/organizations.ts, lib/templates.ts, etc. -- with
+ * RLS as defense-in-depth, not the primary boundary; see
+ * supabase/migrations/0009_enforce_organization_ownership.sql). Never
+ * import this from a Client Component; the secret key it uses must never
+ * reach the browser.
  */
 export function createServiceRoleClient() {
   const { url, secretKey } = requireServiceRoleEnv();

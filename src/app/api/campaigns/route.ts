@@ -8,7 +8,7 @@ import { validateRows, type FieldMapping } from "@/lib/spreadsheet/validateRows"
 import { buildCampaignRowInserts, buildColumnMapping, resolveEmailColumnHeader } from "@/lib/campaigns/persistence";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { STORAGE_BUCKETS } from "@/lib/supabase/storage";
-import { guardApiRoute } from "@/lib/auth/apiGuard";
+import { requireOrganizationContext } from "@/lib/auth/organizationGuard";
 import { RATE_LIMITS } from "@/lib/rateLimit";
 import { exceedsDeclaredContentLength } from "@/lib/upload/contentLength";
 
@@ -34,8 +34,9 @@ const metaSchema = z.object({
  * to the database until it's been checked against that real data.
  */
 export async function POST(request: Request) {
-  const guard = await guardApiRoute({ rateLimit: { key: "campaign-create", ...RATE_LIMITS.campaignCreate } });
+  const guard = await requireOrganizationContext({ rateLimit: { key: "campaign-create", ...RATE_LIMITS.campaignCreate } });
   if ("response" in guard) return guard.response;
+  const { organizationId } = guard;
 
   // Defense-in-depth: reject an obviously oversized request before
   // buffering/parsing the whole multipart body. Not authoritative -- the
@@ -85,7 +86,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const template = await getTemplate(meta.data.templateId);
+  const template = await getTemplate(meta.data.templateId, organizationId);
   if (!template) {
     return NextResponse.json({ error: "Template not found." }, { status: 404 });
   }
@@ -142,7 +143,7 @@ export async function POST(request: Request) {
 
   const campaignId = crypto.randomUUID();
   const safeFileName = file.name.replace(/[^a-z0-9.\-_]+/gi, "-");
-  const storagePath = `${campaignId}/${safeFileName}`;
+  const storagePath = `${organizationId}/${campaignId}/${safeFileName}`;
 
   const supabase = createServiceRoleClient();
 
@@ -159,6 +160,7 @@ export async function POST(request: Request) {
 
   const { error: campaignError } = await supabase.from("campaigns").insert({
     id: campaignId,
+    organization_id: organizationId,
     template_id: meta.data.templateId,
     name: meta.data.campaignName,
     status: "mapped",

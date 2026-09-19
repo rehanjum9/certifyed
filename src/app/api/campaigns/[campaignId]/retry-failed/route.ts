@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { retryFailedRows } from "@/lib/campaigns/generation";
-import { guardApiRoute } from "@/lib/auth/apiGuard";
+import { getCampaign } from "@/lib/campaigns";
+import { requireOrganizationContext } from "@/lib/auth/organizationGuard";
 import { RATE_LIMITS } from "@/lib/rateLimit";
 import { safeApiErrorMessage } from "@/lib/apiError";
 
@@ -13,10 +14,14 @@ export async function POST(
   _request: Request,
   { params }: RouteContext<"/api/campaigns/[campaignId]/retry-failed">,
 ) {
-  const guard = await guardApiRoute({ rateLimit: { key: "retry-generation", ...RATE_LIMITS.retryGeneration } });
+  const guard = await requireOrganizationContext({ rateLimit: { key: "retry-generation", ...RATE_LIMITS.retryGeneration } });
   if ("response" in guard) return guard.response;
 
   const { campaignId } = await params;
+  const campaign = await getCampaign(campaignId, guard.organizationId);
+  if (!campaign) {
+    return NextResponse.json({ error: "Campaign not found." }, { status: 404 });
+  }
 
   try {
     const result = await retryFailedRows(campaignId);

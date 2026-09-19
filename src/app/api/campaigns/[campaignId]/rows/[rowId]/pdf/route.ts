@@ -1,23 +1,34 @@
 import { NextResponse } from "next/server";
-import { getCampaignRow } from "@/lib/campaigns";
+import { getCampaign, getCampaignRow } from "@/lib/campaigns";
 import { buildCertificateFilename } from "@/lib/pdf/filename";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 import { STORAGE_BUCKETS } from "@/lib/supabase/storage";
-import { guardApiRoute } from "@/lib/auth/apiGuard";
+import { requireOrganizationContext } from "@/lib/auth/organizationGuard";
 
 /**
  * Secure download proxy: the output bucket is private, so every download
  * goes through this server route (using the service-role key server-side
- * only) rather than a public URL or an exposed bucket.
+ * only) rather than a public URL or an exposed bucket. `campaignId` is
+ * verified against the caller's active organization FIRST -- a row can
+ * only ever be reached through a campaign that already belongs to that
+ * organization (architecture report, item 24), so a foreign campaign id
+ * 404s here before campaign_rows (which has no organization_id of its
+ * own) is ever queried.
  */
 export async function GET(
   _request: Request,
   { params }: RouteContext<"/api/campaigns/[campaignId]/rows/[rowId]/pdf">,
 ) {
-  const guard = await guardApiRoute();
+  const guard = await requireOrganizationContext();
   if ("response" in guard) return guard.response;
 
   const { campaignId, rowId } = await params;
+
+  const campaign = await getCampaign(campaignId, guard.organizationId);
+  if (!campaign) {
+    return NextResponse.json({ error: "Campaign not found." }, { status: 404 });
+  }
+
   const row = await getCampaignRow(campaignId, rowId);
 
   if (!row) {

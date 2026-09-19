@@ -1,6 +1,10 @@
 import { OAuth2Client } from "google-auth-library";
 
 export const GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
+// Minimum identity scopes needed to reliably learn which Google account the
+// operator just authorized (architecture report, item 17) -- never used for
+// anything beyond reading that one email address back out of the ID token.
+export const GMAIL_IDENTITY_SCOPES = ["openid", "https://www.googleapis.com/auth/userinfo.email"];
 const GMAIL_SEND_ENDPOINT = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send";
 
 export interface GmailSendClient {
@@ -22,34 +26,39 @@ function requiredOAuthEnv(): { clientId: string; clientSecret: string; redirectU
 /**
  * Builds a bare OAuth2Client for the connect/callback flow -- no refresh
  * token required yet, since this client only ever generates the consent URL
- * and exchanges the authorization code.
+ * and exchanges the authorization code. These three env vars describe the
+ * one shared Google Cloud OAuth application this deployment uses; they are
+ * NOT per-organization (every workspace authorizes against the same OAuth
+ * client, then gets its own refresh token -- see lib/email/connections.ts).
  */
 export function createGmailOAuthClient(): OAuth2Client {
   const { clientId, clientSecret, redirectUri } = requiredOAuthEnv();
   return new OAuth2Client({ clientId, clientSecret, redirectUri });
 }
 
-let cachedSendingClient: OAuth2Client | null = null;
-
 /**
- * Builds (and caches) the OAuth2Client used for actually sending mail:
- * credentials are seeded with GMAIL_REFRESH_TOKEN so the library
- * transparently exchanges it for a fresh access token on every call that
- * needs one -- callers never handle access tokens directly.
+ * Extracts the authorized Google account's own email from the ID token
+ * Google returns alongside the access/refresh tokens (requires the
+ * `openid` + `userinfo.email` scopes -- see GMAIL_IDENTITY_SCOPES). Uses
+ * google-auth-library's own signature verification
+ * (`OAuth2Client#verifyIdToken`) rather than a naive JWT payload decode, so
+ * this can never be fooled by an unsigned/forged token. Only `email` (and
+ * whether Google itself marked it verified) is read from the payload --
+ * nothing else in the token is trusted or used.
+ *
+ * The caller must never let the user type/override this value (architecture
+ * report, item 17: no From-address spoofing) -- it's always exactly the
+ * account that completed OAuth consent.
  */
-function getSendingOAuth2Client(): OAuth2Client {
-  const refreshToken = process.env.GMAIL_REFRESH_TOKEN;
-  if (!refreshToken) {
-    throw new Error(
-      "Gmail sending is not configured: GMAIL_REFRESH_TOKEN is missing. Complete the Gmail connection flow " +
-        "(GET /api/email/gmail/connect) and add the refresh token it prints to your environment.",
-    );
+export async function getAuthorizedAccountEmail(oauth2Client: OAuth2Client, idToken: string): Promise<string> {
+  const { clientId } = requiredOAuthEnv();
+  const ticket = await oauth2Client.verifyIdToken({ idToken, audience: clientId });
+  const payload = ticket.getPayload();
+
+  if (!payload?.email || payload.email_verified === false) {
+    throw new Error("Google did not confirm a verified email address for this account.");
   }
-  if (!cachedSendingClient) {
-    cachedSendingClient = createGmailOAuthClient();
-    cachedSendingClient.setCredentials({ refresh_token: refreshToken });
-  }
-  return cachedSendingClient;
+  return payload.email;
 }
 
 /**
@@ -83,7 +92,7 @@ export function classifyGmailApiError(status: number, rawBody: string): Error {
 
   if (haystack.includes("invalid_grant") || haystack.includes("invalid grant")) {
     return new Error(
-      "Gmail authorization has expired or was revoked. Reconnect via GET /api/email/gmail/connect and update GMAIL_REFRESH_TOKEN.",
+      "Gmail authorization has expired or was revoked. Reconnect this workspace's Gmail account in Settings.",
     );
   }
   if (
@@ -98,12 +107,12 @@ export function classifyGmailApiError(status: number, rawBody: string): Error {
   }
   if (haystack.includes("insufficient") && haystack.includes("permission")) {
     return new Error(
-      "Gmail access was revoked or no longer includes the gmail.send scope. Reconnect via GET /api/email/gmail/connect.",
+      "Gmail access was revoked or no longer includes the gmail.send scope. Reconnect this workspace's Gmail account in Settings.",
     );
   }
   if (status === 403) {
     return new Error(
-      "Gmail rejected this request as forbidden -- the connected account may have revoked access. Reconnect via GET /api/email/gmail/connect.",
+      "Gmail rejected this request as forbidden -- the connected account may have revoked access. Reconnect this workspace's Gmail account in Settings.",
     );
   }
   if (status === 400 && (haystack.includes("invalid to header") || haystack.includes("invalid recipient") || haystack.includes("invalid argument"))) {
@@ -116,20 +125,27 @@ export function classifyGmailApiError(status: number, rawBody: string): Error {
 async function getAccessToken(oauth2Client: OAuth2Client): Promise<string> {
   const { token } = await oauth2Client.getAccessToken();
   if (!token) {
-    throw new Error("Failed to obtain a Gmail access token from the configured refresh token.");
+    throw new Error("Failed to obtain a Gmail access token from the connected account's refresh token.");
   }
   return token;
 }
 
 /**
- * The real Gmail send client: refreshes an access token from
- * GMAIL_REFRESH_TOKEN, then calls users.messages.send directly via fetch.
- * A thin wrapper rather than the full googleapis SDK -- this app only ever
- * needs this one endpoint, so google-auth-library (Google's official OAuth
- * client) handles token refresh while the REST call stays dependency-light.
+ * The real Gmail send client: refreshes an access token from the given
+ * (already-decrypted, per-organization) refresh token, then calls
+ * users.messages.send directly via fetch. A thin wrapper rather than the
+ * full googleapis SDK -- this app only ever needs this one endpoint, so
+ * google-auth-library (Google's official OAuth client) handles token
+ * refresh while the REST call stays dependency-light.
+ *
+ * Deliberately takes the refresh token as an explicit argument rather than
+ * reading a global env var or caching a singleton client: every
+ * organization has its own Gmail connection (see lib/email/connections.ts),
+ * so there is no single "the" refresh token to cache process-wide.
  */
-export function getGmailSendClient(): GmailSendClient {
-  const oauth2Client = getSendingOAuth2Client();
+export function getGmailSendClient(refreshToken: string): GmailSendClient {
+  const oauth2Client = createGmailOAuthClient();
+  oauth2Client.setCredentials({ refresh_token: refreshToken });
 
   return {
     async sendRaw(rawMessage: string): Promise<{ id: string }> {

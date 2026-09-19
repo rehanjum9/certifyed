@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { NextResponse } from "next/server";
 
-vi.mock("@/lib/auth/apiGuard", () => ({ guardApiRoute: vi.fn() }));
+vi.mock("@/lib/auth/organizationGuard", () => ({ requireOrganizationContext: vi.fn() }));
 vi.mock("@/lib/campaigns", () => ({ getCampaign: vi.fn() }));
 vi.mock("@/lib/campaigns/jobs", () => ({
   getActiveGenerationJob: vi.fn(),
@@ -10,7 +10,7 @@ vi.mock("@/lib/campaigns/jobs", () => ({
 }));
 vi.mock("@/lib/campaigns/generation", () => ({ computeCampaignProgress: vi.fn() }));
 
-import { guardApiRoute } from "@/lib/auth/apiGuard";
+import { requireOrganizationContext } from "@/lib/auth/organizationGuard";
 import { getCampaign } from "@/lib/campaigns";
 import { getActiveGenerationJob, startGenerationJob } from "@/lib/campaigns/jobs";
 import { computeCampaignProgress } from "@/lib/campaigns/generation";
@@ -24,6 +24,8 @@ function params(campaignId: string) {
   return { params: Promise.resolve({ campaignId }) };
 }
 
+const ORG_CONTEXT = { user: { id: "user-1", email: null }, organizationId: "org-a", organizationName: "Club A", role: "member" as const };
+
 const PROGRESS = {
   eligibleTotal: 5,
   invalidImportedTotal: 0,
@@ -35,19 +37,19 @@ const PROGRESS = {
 };
 
 describe("POST /api/campaigns/[campaignId]/generation", () => {
-  it("returns 401 when unauthenticated, without touching the campaign at all", async () => {
-    vi.mocked(guardApiRoute).mockResolvedValue({
-      response: NextResponse.json({ error: "Authentication required." }, { status: 401 }),
+  it("returns 403 when the caller has no workspace/access, without touching the campaign at all", async () => {
+    vi.mocked(requireOrganizationContext).mockResolvedValue({
+      response: NextResponse.json({ error: "You don't belong to any workspace yet." }, { status: 403 }),
     });
 
     const response = await POST(new Request("http://x", { method: "POST" }), params("c1"));
 
-    expect(response.status).toBe(401);
+    expect(response.status).toBe(403);
     expect(getCampaign).not.toHaveBeenCalled();
   });
 
   it("returns 429 when the rate limit is exceeded", async () => {
-    vi.mocked(guardApiRoute).mockResolvedValue({
+    vi.mocked(requireOrganizationContext).mockResolvedValue({
       response: NextResponse.json({ error: "Too many requests." }, { status: 429 }),
     });
 
@@ -57,9 +59,19 @@ describe("POST /api/campaigns/[campaignId]/generation", () => {
     expect(getCampaign).not.toHaveBeenCalled();
   });
 
-  it("starts a job and returns it when authenticated and rows are pending", async () => {
-    vi.mocked(guardApiRoute).mockResolvedValue({ user: { id: "operator-1", email: null } });
-    vi.mocked(getCampaign).mockResolvedValue({ id: "c1" } as never);
+  it("returns 404 when the campaign doesn't belong to the caller's organization", async () => {
+    vi.mocked(requireOrganizationContext).mockResolvedValue(ORG_CONTEXT);
+    vi.mocked(getCampaign).mockResolvedValue(null);
+
+    const response = await POST(new Request("http://x", { method: "POST" }), params("c1"));
+
+    expect(getCampaign).toHaveBeenCalledWith("c1", "org-a");
+    expect(response.status).toBe(404);
+  });
+
+  it("starts a job and returns it when authenticated, a member of the campaign's organization, and rows are pending", async () => {
+    vi.mocked(requireOrganizationContext).mockResolvedValue(ORG_CONTEXT);
+    vi.mocked(getCampaign).mockResolvedValue({ id: "c1", organization_id: "org-a" } as never);
     vi.mocked(getActiveGenerationJob).mockResolvedValue(null);
     vi.mocked(computeCampaignProgress).mockResolvedValue(PROGRESS);
     vi.mocked(startGenerationJob).mockResolvedValue({

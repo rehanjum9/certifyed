@@ -25,7 +25,25 @@ export async function DELETE(_request: Request, { params }: RouteContext<"/api/a
     return NextResponse.json({ error: "Invalid workspace id." }, { status: 400 });
   }
 
-  const result = await deleteOrganizationSafely(parsedParams.data.organizationId);
+  let result: Awaited<ReturnType<typeof deleteOrganizationSafely>>;
+  try {
+    result = await deleteOrganizationSafely(parsedParams.data.organizationId);
+  } catch (error) {
+    // Safe server-side diagnostic only -- the raw driver/Postgres error
+    // (which can name internal detail like constraints or table names, and
+    // in the one case this is actually expected to fire -- a resource FK
+    // slipping in between the pre-check and the delete -- would otherwise
+    // be genuinely useful for a human to see) is logged here, never sent to
+    // the browser. Nothing this operation touches ever involves a secret or
+    // token, but the principle is kept regardless: only the organization id
+    // and a plain error message are logged, and the browser gets a fixed,
+    // generic message either way.
+    console.error(
+      `[api/admin/organizations] Failed to delete organization ${parsedParams.data.organizationId}:`,
+      error instanceof Error ? error.message : error,
+    );
+    return NextResponse.json({ error: "Failed to delete the workspace. Try again, or contact support if this keeps happening." }, { status: 500 });
+  }
 
   if (!result.ok && result.reason === "not_found") {
     return NextResponse.json({ error: "Workspace not found." }, { status: 404 });

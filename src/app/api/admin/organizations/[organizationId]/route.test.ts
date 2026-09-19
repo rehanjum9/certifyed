@@ -75,4 +75,23 @@ describe("DELETE /api/admin/organizations/[organizationId]", () => {
     expect(response.status).toBe(400);
     expect(deleteOrganizationSafely).not.toHaveBeenCalled();
   });
+
+  it("returns a safe, generic 500 (never the raw database error) when deleteOrganizationSafely throws, and logs the real error server-side only", async () => {
+    vi.mocked(requirePlatformAdmin).mockResolvedValue({ user: { id: "platform-admin-1", email: null } });
+    vi.mocked(deleteOrganizationSafely).mockRejectedValue(
+      new Error('update or delete on table "organizations" violates foreign key constraint "templates_organization_id_fkey" on table "templates"'),
+    );
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const response = await DELETE(new Request("http://x", { method: "DELETE" }), params(VALID_ORG_ID));
+    const body = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(body.error).not.toMatch(/constraint|foreign key|postgres|sql/i);
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
+    expect(consoleErrorSpy.mock.calls[0].join(" ")).toContain(VALID_ORG_ID);
+    expect(consoleErrorSpy.mock.calls[0].join(" ")).toContain("foreign key constraint");
+
+    consoleErrorSpy.mockRestore();
+  });
 });

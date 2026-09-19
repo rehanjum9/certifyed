@@ -312,4 +312,37 @@ describe("deleteOrganizationSafely", () => {
     expect(result).toEqual({ ok: true });
     expect(client.deleteUser).not.toHaveBeenCalled();
   });
+
+  it(
+    "never queries organization_members or counts owners itself -- allowing a workspace's final-owner membership to be " +
+      "cascade-deleted is enforced entirely at the database level (0010_allow_workspace_delete_cascade.sql's " +
+      "prevent_last_owner_removal exception), not duplicated here",
+    async () => {
+      const client = buildDeleteSafelyMockClient({});
+      vi.mocked(createServiceRoleClient).mockReturnValue(client as unknown as ReturnType<typeof createServiceRoleClient>);
+
+      const result = await deleteOrganizationSafely("org-1");
+
+      expect(result).toEqual({ ok: true });
+      expect(client.from).not.toHaveBeenCalledWith("organization_members");
+    },
+  );
+
+  it("deletes cleanly regardless of member count -- a single-owner workspace and a multi-member workspace both just issue the same DELETE and rely on the DB cascade", async () => {
+    // This function has no member-count branch of its own; both scenarios
+    // exercise the exact same code path. The distinction (single owner vs.
+    // several members) only matters at the database level, where the
+    // ON DELETE CASCADE fans out to however many organization_members rows
+    // actually exist -- see 0010's migration test for the trigger-level
+    // proof that the cascade itself is no longer blocked.
+    const singleOwnerClient = buildDeleteSafelyMockClient({});
+    vi.mocked(createServiceRoleClient).mockReturnValue(singleOwnerClient as unknown as ReturnType<typeof createServiceRoleClient>);
+    await expect(deleteOrganizationSafely("org-1")).resolves.toEqual({ ok: true });
+    expect(singleOwnerClient.orgDeleteMock).toHaveBeenCalled();
+
+    const multiMemberClient = buildDeleteSafelyMockClient({});
+    vi.mocked(createServiceRoleClient).mockReturnValue(multiMemberClient as unknown as ReturnType<typeof createServiceRoleClient>);
+    await expect(deleteOrganizationSafely("org-1")).resolves.toEqual({ ok: true });
+    expect(multiMemberClient.orgDeleteMock).toHaveBeenCalled();
+  });
 });
